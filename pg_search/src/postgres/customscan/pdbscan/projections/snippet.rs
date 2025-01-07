@@ -26,6 +26,9 @@ use std::ptr::addr_of_mut;
 
 const DEFAULT_SNIPPET_PREFIX: &str = "<b>";
 const DEFAULT_SNIPPET_POSTFIX: &str = "</b>";
+// NOTE: This is the default setting from tantivy
+// https://docs.rs/tantivy/latest/tantivy/snippet/struct.SnippetGenerator.html#method.set_max_num_chars
+const DEFAULT_SNIPPET_MAX_NUM_CHARS: i32 = 150;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct SnippetInfo {
@@ -116,7 +119,8 @@ pub unsafe fn uses_snippets(
                         field: attname,
                         start_tag: start_tag.unwrap_or_else(|| DEFAULT_SNIPPET_PREFIX.to_string()),
                         end_tag: end_tag.unwrap_or_else(|| DEFAULT_SNIPPET_POSTFIX.to_string()),
-                        max_num_chars: max_num_chars_arg as usize,
+                        max_num_chars: max_num_chars.unwrap_or(DEFAULT_SNIPPET_MAX_NUM_CHARS)
+                            as usize,
                     });
                 } else {
                     panic!("`paradedb.snippet()`'s arguments must be literals")

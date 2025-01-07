@@ -377,6 +377,15 @@ fn snippet(mut conn: PgConnection) {
     assert_eq!(row.0, 3);
     assert_eq!(row.1, "Sleek running <h1>shoes</h1>");
     assert_relative_eq!(row.2, 2.484906, epsilon = 1e-6);
+
+    let row: (i32, String, f32) = "
+    SELECT id, paradedb.snippet(description, '<h1>', '</h1>', max_num_chars=>2), paradedb.score(id)
+    FROM paradedb.bm25_search WHERE bm25_search @@@ 'description:shoes' ORDER BY id"
+        .fetch_one(&mut conn);
+
+    assert_eq!(row.0, 3);
+    assert_eq!(row.1, "<h1>shoes</h1>");
+    assert_relative_eq!(row.2, 2.484906, epsilon = 1e-6);
 }
 
 #[rstest]
