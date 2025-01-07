@@ -23,24 +23,16 @@ use rstest::*;
 use sqlx::PgConnection;
 
 #[rstest]
-fn index_only_scan_on_key_field(mut conn: PgConnection) {
+fn custom_scan_on_key_field(mut conn: PgConnection) {
     use serde_json::Value;
 
     SimpleProductsTable::setup().execute(&mut conn);
 
     let (plan, ) = "EXPLAIN (ANALYZE, FORMAT JSON) SELECT id FROM paradedb.bm25_search WHERE id @@@ 'description:keyboard'".fetch_one::<(Value,)>(&mut conn);
-    let plan = plan
-        .get(0)
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("Plan")
-        .unwrap()
-        .as_object()
-        .unwrap();
     eprintln!("{plan:#?}");
+    let plan = plan.pointer("/0/Plan/Plans/0").unwrap();
     pretty_assertions::assert_eq!(
-        plan.get("Node Type"),
-        Some(&Value::String(String::from("Index Only Scan")))
+        plan.get("Custom Plan Provider"),
+        Some(&Value::String(String::from("ParadeDB Scan")))
     );
 }

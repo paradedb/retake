@@ -24,6 +24,7 @@ use pgrx::{pg_sys, PgMemoryContexts};
 use std::ffi::CStr;
 
 mod builders;
+mod dsm;
 mod exec;
 mod hook;
 mod path;

@@ -78,10 +78,30 @@ pub extern "C" fn paradedb_rel_pathlist_callback<CS: CustomScan>(
             let forced = path.flags & Flags::Force as u32 != 0;
             path.flags ^= Flags::Force as u32; // make sure to clear this flag because it's special to us
 
-            let custom_path = PgMemoryContexts::CurrentMemoryContext
+            let mut custom_path = PgMemoryContexts::CurrentMemoryContext
                 .copy_ptr_into(&mut path, std::mem::size_of_val(&path));
 
-            if forced {
+            if (*custom_path).path.parallel_aware {
+                // add the partial path since the user-generated plan is parallel aware
+                pg_sys::add_partial_path(rel, custom_path.cast());
+
+                // remove all the existing possible paths
+                (*rel).pathlist = std::ptr::null_mut();
+
+                // then make another copy of it, increase its costs really, really high and
+                // submit it as a regular path too, immediately after clearing out all the other
+                // existing possible paths.
+                //
+                // We don't want postgres to choose this path, but we have to have at least one
+                // non-partial path available for it to consider
+                let copy = PgMemoryContexts::CurrentMemoryContext
+                    .copy_ptr_into(&mut path, std::mem::size_of_val(&path));
+                (*copy).path.total_cost = 1000000000.0;
+                (*copy).path.startup_cost = 1000000000.0;
+
+                // will be added down below
+                custom_path = copy.cast();
+            } else if forced {
                 // remove all the existing possible paths
                 (*rel).pathlist = std::ptr::null_mut();
             }

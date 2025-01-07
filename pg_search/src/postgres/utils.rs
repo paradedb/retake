@@ -59,6 +59,11 @@ pub fn item_pointer_to_u64(ctid: pg_sys::ItemPointerData) -> u64 {
     (blockno << 16) | offno
 }
 
+pub fn ctid_to_u64(ctid: tantivy::Ctid) -> u64 {
+    let (blockno, offno) = (ctid.0 as u64, ctid.1 as u64);
+    (blockno << 16) | offno
+}
+
 /// Rather than using pgrx' version of this function, we use our own, which doesn't leave 2
 /// empty bytes in the middle of the 64bit representation.  A ctid being only 48bits means
 /// if we leave the upper 16 bits (2 bytes) empty, tantivy will have a better chance of

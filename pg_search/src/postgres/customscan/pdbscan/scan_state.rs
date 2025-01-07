@@ -19,6 +19,7 @@ use crate::index::fast_fields_helper::WhichFastField;
 use crate::index::reader::index::{SearchIndexReader, SearchResults};
 use crate::postgres::customscan::builders::custom_path::SortDirection;
 use crate::postgres::customscan::pdbscan::exec_methods::ExecMethod;
+use crate::postgres::customscan::pdbscan::parallel::PdbParallelScanState;
 use crate::postgres::customscan::pdbscan::projections::snippet::SnippetInfo;
 use crate::postgres::customscan::CustomScanState;
 use crate::postgres::options::SearchIndexCreateOptions;
@@ -34,6 +35,8 @@ use tantivy::snippet::SnippetGenerator;
 
 #[derive(Default)]
 pub struct PdbScanState {
+    pub parallel_state: Option<*mut PdbParallelScanState>,
+
     pub rti: pg_sys::Index,
 
     pub search_query_input: SearchQueryInput,

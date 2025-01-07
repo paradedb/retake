@@ -25,7 +25,6 @@ use std::iter::Flatten;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tantivy::collector::{Collector, TopDocs};
-use tantivy::fastfield::Column;
 use tantivy::index::Index;
 use tantivy::query::QueryParser;
 use tantivy::schema::FieldType;
@@ -38,6 +37,7 @@ use tantivy::{snippet::SnippetGenerator, Executor};
 use crate::index::{setup_tokenizers, BlockDirectoryType};
 use crate::postgres::storage::block::CLEANUP_LOCK;
 use crate::postgres::storage::buffer::{Buffer, BufferManager};
+use crate::postgres::utils::ctid_to_u64;
 use crate::query::SearchQueryInput;
 use crate::schema::{SearchFieldName, SearchIndexSchema};
 
@@ -51,11 +51,9 @@ pub struct SearchIndexScore {
 
 impl SearchIndexScore {
     #[inline]
-    pub fn new(ffcolumn: &Column<u64>, doc: DocId, score: Score) -> Self {
+    pub fn new(ctid: Ctid, score: Score) -> Self {
         Self {
-            ctid: ffcolumn
-                .first(doc)
-                .expect("ctid should have a non-null value"),
+            ctid: ctid_to_u64(ctid),
             bm25: score,
         }
     }
@@ -87,12 +85,6 @@ pub enum SearchResults {
     #[allow(clippy::type_complexity)]
     BufferedChannel(
         std::iter::Flatten<crossbeam::channel::IntoIter<Vec<(SearchIndexScore, DocAddress)>>>,
-    ),
-
-    #[allow(clippy::type_complexity)]
-    UnscoredBufferedChannel(
-        crossbeam::channel::IntoIter<(SegmentOrdinal, Column<u64>, std::vec::IntoIter<DocId>)>,
-        Option<(SegmentOrdinal, Column<u64>, std::vec::IntoIter<DocId>)>,
     ),
 
     Channel(crossbeam::channel::IntoIter<(SearchIndexScore, DocAddress)>),
@@ -130,13 +122,6 @@ impl Debug for SearchResults {
             SearchResults::BufferedChannel(iter) => {
                 write!(f, "SearchResults::BufferedChannel(~{:?})", iter.size_hint())
             }
-            SearchResults::UnscoredBufferedChannel(iter, _) => {
-                write!(
-                    f,
-                    "SearchResults::UnscoredBufferedChannel(~{:?})",
-                    iter.size_hint()
-                )
-            }
             SearchResults::Channel(iter) => {
                 write!(f, "SearchResults::Channel(~{:?})", iter.size_hint())
             }
@@ -162,18 +147,6 @@ impl Iterator for SearchResults {
                 .map(|(OrderedScore { score, .. }, doc_address, _ctid)| (score, doc_address)),
             SearchResults::TopNByField(_, iter) => iter.next(),
             SearchResults::BufferedChannel(iter) => iter.next(),
-            SearchResults::UnscoredBufferedChannel(iter, buffer) => loop {
-                if buffer.is_none() {
-                    *buffer = Some(iter.next()?);
-                }
-                let (segment_ord, ctid_ff, doc) = buffer.as_mut().unwrap();
-                if let Some(doc) = doc.next() {
-                    let doc_address = DocAddress::new(*segment_ord, doc);
-                    let scored = SearchIndexScore::new(ctid_ff, doc, 0.0);
-                    return Some((scored, doc_address));
-                }
-                *buffer = None;
-            },
             SearchResults::Channel(iter) => iter.next(),
             SearchResults::SingleSegment(iter) => iter.next(),
             SearchResults::AllSegments(iter) => iter.next(),
@@ -187,7 +160,6 @@ impl Iterator for SearchResults {
             SearchResults::TopNByScore(_, iter) => iter.size_hint(),
             SearchResults::TopNByField(_, iter) => iter.size_hint(),
             SearchResults::BufferedChannel(iter) => iter.size_hint(),
-            SearchResults::UnscoredBufferedChannel(iter, _) => iter.size_hint(),
             SearchResults::Channel(iter) => iter.size_hint(),
             SearchResults::SingleSegment(iter) => iter.size_hint(),
             SearchResults::AllSegments(iter) => iter.size_hint(),
@@ -202,7 +174,6 @@ impl SearchResults {
             SearchResults::TopNByScore(count, _) => Some(*count),
             SearchResults::TopNByField(count, _) => Some(*count),
             SearchResults::BufferedChannel(_) => None,
-            SearchResults::UnscoredBufferedChannel(..) => None,
             SearchResults::Channel(_) => None,
             SearchResults::SingleSegment(_) => None,
             SearchResults::AllSegments(_) => None,
@@ -270,7 +241,7 @@ impl SearchIndexReader {
         self.schema.key_field()
     }
 
-    fn query(&self, search_query_input: &SearchQueryInput) -> Box<dyn Query> {
+    pub fn query(&self, search_query_input: &SearchQueryInput) -> Box<dyn Query> {
         let mut parser = QueryParser::for_index(
             &self.underlying_index,
             self.schema
@@ -523,7 +494,7 @@ impl SearchIndexReader {
         Some((count as f64 / segment_doc_proportion).ceil() as usize)
     }
 
-    fn collect<C: Collector + 'static>(
+    pub fn collect<C: Collector + 'static>(
         &self,
         query: &SearchQueryInput,
         collector: C,

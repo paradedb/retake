@@ -54,6 +54,7 @@ fn generates_custom_scan_for_or(mut conn: PgConnection) {
     SimpleProductsTable::setup().execute(&mut conn);
 
     let (plan, ) = "EXPLAIN (ANALYZE, FORMAT JSON) SELECT * FROM paradedb.bm25_search WHERE bm25_search @@@ 'description:keyboard' OR description @@@ 'shoes'".fetch_one::<(Value,)>(&mut conn);
+
     let plan = plan
         .get(0)
         .unwrap()
@@ -62,7 +63,12 @@ fn generates_custom_scan_for_or(mut conn: PgConnection) {
         .get("Plan")
         .unwrap()
         .as_object()
+        .unwrap()
+        .get("Plans")
+        .unwrap()
+        .get(0)
         .unwrap();
+
     eprintln!("{plan:#?}");
     assert_eq!(
         plan.get("Custom Plan Provider"),
