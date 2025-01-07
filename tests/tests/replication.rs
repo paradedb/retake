@@ -344,6 +344,7 @@ async fn test_replication_with_pg_search_only_on_replica() -> Result<()> {
 }
 
 #[rstest]
+#[ignore = "not supported in community"]
 async fn test_wal_streaming_replication_without_pg_search() -> Result<()> {
     // Primary Postgres setup + insert data
     let postgresql_conf = "
@@ -572,6 +573,7 @@ async fn test_physical_streaming_replication() -> Result<()> {
 }
 
 #[rstest]
+#[ignore = "not supported in community"]
 async fn test_wal_streaming_replication_with_pg_search() -> Result<()> {
     // Primary Postgres setup + insert data
     let postgresql_conf = "

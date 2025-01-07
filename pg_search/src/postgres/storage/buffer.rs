@@ -16,19 +16,13 @@ enum XlogFlag {
 enum XlogStyle {
     #[default]
     Unlogged,
+    #[allow(dead_code)]
     Logged(NonNull<pg_sys::GenericXLogState>, XlogFlag),
 }
 
 impl XlogStyle {
     fn get_page(&self, buffer: pg_sys::Buffer) -> pg_sys::Page {
-        unsafe {
-            match self {
-                XlogStyle::Logged(state, flag) => {
-                    pg_sys::GenericXLogRegisterBuffer(state.as_ptr(), buffer, *flag as i32)
-                }
-                XlogStyle::Unlogged => pg_sys::BufferGetPage(buffer),
-            }
-        }
+        unsafe { pg_sys::BufferGetPage(buffer) }
     }
 }
 
@@ -77,26 +71,8 @@ pub struct BufferMut {
 impl Drop for BufferMut {
     fn drop(&mut self) {
         unsafe {
-            if pg_sys::IsTransactionState() {
-                if self.dirty {
-                    match self.style {
-                        XlogStyle::Logged(state, _) => {
-                            pg_sys::GenericXLogFinish(state.as_ptr());
-                        }
-                        XlogStyle::Unlogged => {
-                            pg_sys::MarkBufferDirty(self.inner.pg_buffer);
-                        }
-                    }
-                } else {
-                    match self.style {
-                        XlogStyle::Logged(state, _) => {
-                            pg_sys::GenericXLogAbort(state.as_ptr());
-                        }
-                        XlogStyle::Unlogged => {
-                            // noop
-                        }
-                    }
-                }
+            if pg_sys::IsTransactionState() && self.dirty {
+                pg_sys::MarkBufferDirty(self.inner.pg_buffer);
             }
         }
     }
