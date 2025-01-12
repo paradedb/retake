@@ -165,8 +165,7 @@ installDocker() {
 
 # TODO: 
 installDeb(){
-  echo "Select your distribution"
-
+  # Install curl
   echo "Installing dependencies...."
   echo "Installing cURL"
 
@@ -175,6 +174,8 @@ installDeb(){
 
   echo "Successfully Installed cURL✅"
 
+  # Get actual distribution name for suitable binary
+  echo "Select your distribution"
   distros=("bookworm(Debian 12.0)" "jammy(Ubuntu 22.04)" "noble(Ubuntu 24.04)")
   distro=
   select op in "${distros[@]}"
@@ -192,6 +193,7 @@ installDeb(){
     esac
   done
 
+  # Confirm architecture
   if [ "$ARCH" = "x86_64" ]; then
     ARCH="amd64"
   fi
