@@ -162,6 +162,63 @@ installDocker() {
   echo -e "\n\nTo use paradedb execute the command: docker exec -it paradedb psql $dbname -U $pguser"
 }
 
+# Installs Mac OS Binary
+installMacBinary(){
+  # Determine MacOS version
+  OS_VERSION=$(sw_vers -productVersion)
+  MAC_NAME=
+  if [[ "$OS_VERSION" == 15.* ]]; then
+    MAC_NAME="sequoia"
+  elif [[ "$OS_VERSION" == 14.* ]]; then
+    MAC_NAME="sonoma"
+  else
+    echo "Unsupported macOS version: $OS_VERSION"
+    exit 1
+  fi
+
+  # Select postgres version
+  pg_version=
+  echo "Select postgres version[Please use 1 for v14, 2 for v15 and 3 for v16](Note: ParadeDB is supported on PG12-16. For other postgres versions, you will need to compile from source.)"
+  versions=("14" "15" "16" "17")
+
+  select vers in "${versions[@]}"
+  do
+    case $vers in
+      "14")
+        pg_version="14"
+        break ;;
+      "15")
+        pg_version="15"
+        break ;;
+      "16")
+        pg_version="16"
+        break ;;
+      "17")
+        pg_version="17"
+        break ;;
+      *)
+        echo "Invalid Choice! Please use 1 for v14, 2 for v15 and 3 for v16"
+    esac
+  done
+
+  # Setup binary download URL
+  filename="pg_search@15--${LATEST_RELEASE_VERSION}.arm64_${MAC_NAME}.pkg"
+  url="https://github.com/paradedb/paradedb/releases/download/${LATEST_RELEASE_VERSION}/"
+
+  echo "Downloading ${url}"
+  curl -l "$url" > "$filename" || false
+  echo "Binary Downloaded Successfully!🚀"
+
+  # TODO: Unpack PKG at the desired locations
+  echo "Installing $filename..."
+  sudo installer -pkg "$filename" -target /
+  if [[ $? -ne 0 ]]; then
+    echo "Installation failed. Please check the package and try again."
+    exit 1
+  fi
+
+  echo "Installation completed successfully!"
+}
 
 # TODO: 
 installDeb(){
@@ -276,6 +333,8 @@ installBinary(){
 
 
 
+
+
 ########################################
 # Main Loop
 ########################################
@@ -319,7 +378,7 @@ elif [[ "$OSTYPE" = "darwin"* ]]; then
         installDocker
         break ;;
       "Extension Binary")
-        installBinary
+        installMacBinary
         break ;;
       *)
         echo "Invalid option. Exiting..."
