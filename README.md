@@ -50,6 +50,16 @@ ParadeDB and its extensions can be deployed in one of two ways:
 
 For more information, including enterprise features and support, please [contact us by email](mailto:sales@paradedb.com).
 
+### Using the Setup Script
+
+For an interactive setup run the following in your terminal.
+
+```bash
+sh <(curl https://www.paradedb.com)
+```
+
+**Note**: Currently we only support stable binaries for Debian and RHEL based linux distributions. For other Linux/Unix based Operating systems you'll need to build ParadeDB from source.
+
 ### Extensions
 
 You can find prebuilt binaries for the ParadeDB Postgres extensions on Debian 11, 12, Ubuntu 22.04 and 24.04, Red Hat Enterprise Linux 8 and 9, and macOS 14 (Sonoma) and 15 (Sequoia) for Postgres 14+ in the [GitHub Releases](https://github.com/paradedb/paradedb/releases/latest).
