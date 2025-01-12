@@ -1,35 +1,41 @@
 #!/bin/bash
 
+# This script prompts the user for installation options and installs ParadeDB on their system. It
+# is *not* intended for production use. The script is included in our website and can be curl'd.
+
+set -Eeuo pipefail
+
+########################################
+# Variables
+########################################
+
 ARCH=$(uname -m)
 LATEST_RELEASE_TAG=$(curl -s "https://api.github.com/repos/paradedb/paradedb/releases/latest" | jq -r .tag_name)
 LATEST_RELEASE_VERSION="${LATEST_RELEASE_TAG#v}"
 
-EXIT_MSG="\n\nIf you'd like to stay upto date with everything about ParadeDB\nJoin our slack channel: https://join.slack.com/t/paradedbcommunity/shared_invite/zt-217mordsh-ielS6BiZf7VW3rqKBFgAlQ \nGitHub: https://github.com/paradedb/paradedb"
-
-set -Eeuo pipefail
+########################################
+# Helper Functions
+########################################
 
 function commandExists() {
   command -v "$1" >/dev/null 2>&1
 }
 
-installDockerDepsLinux(){
-  echo "Which type of distro are you using?(Required to install dependencies)"
-  OPTIONS=("Debian Based" "RHEL Based" "Arch Based")
-
+installDockerDepsLinux() {
+  echo "Please provide your Linux distribution to install Docker. If you prefer to install Docker manually, please exit now and come back after installation."
+  
+  OPTIONS=("Debian/Ubuntu" "Red Hat/Fedora" "Arch Linux")
   select opt in "${OPTIONS[@]}"
   do
     case $opt in
-      "Debian Base")
+      "Debian/Ubuntu")
         sudo apt-get install docker -y || false
-        sudo systemctl enable --now docker
         break ;;
-      "RHEL Based")
+      "Red Hat/Fedora")
         sudo dnf install docker -y || false
-        sudo systemctl enable --now docker
         break ;;
-      "Arch Based")
+      "Arch Linux")
         sudo pacman -Su docker || false
-        sudo systemctl enable --now docker
         break ;;
       *)
         break ;;
@@ -38,6 +44,16 @@ installDockerDepsLinux(){
 
 }
 
+
+
+
+
+
+
+
+
+# TODO: This looks good, but could be cleaned up further. For instance, the commandExists should be checked
+# in the main loop to avoid the duplicate OS checking.
 installDocker() {
   # Set default values
   pguser="myuser"
@@ -58,6 +74,7 @@ installDocker() {
         exit 0
       elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         installDockerDepsLinux
+        sudo systemctl enable --now docker
         echo "Successfully Installed Docker ✅"
       else
         echo "Unsupported OS type: $OSTYPE"
@@ -145,6 +162,8 @@ installDocker() {
   echo -e "\n\nTo use paradedb execute the command: docker exec -it paradedb psql $dbname -U $pguser"
 }
 
+
+# TODO: 
 installDeb(){
   echo "Select your distribution"
 
@@ -187,6 +206,7 @@ installDeb(){
   sudo apt install ./"$filename" -y || false
 }
 
+# TODO: We also support EL8 and EL9, we should ask the user and have them install the right one
 # Installs latest RPM package
 installRPM(){
   filename="pg_search_$1-$LATEST_RELEASE_VERSION-1PARADEDB.el9.${ARCH}.rpm"
@@ -202,13 +222,15 @@ installRPM(){
   echo "ParadeDB installed successfully!"
 }
 
+
+# TODO: This needs to be updated to also ask for the architecture (x86_64 vs arm64). Binaries are built for a specific version
 # Installs latest binary for ParadeDB
 installBinary(){
 
   # Select postgres version
   pg_version=
   echo "Select postgres version[Please use 1 for v14, 2 for v15 and 3 for v16](Note: ParadeDB is supported on PG12-16. For other postgres versions, you will need to compile from source.)"
-  versions=("14" "15" "16")
+  versions=("14" "15" "16" "17")
 
   select vers in "${versions[@]}"
   do
@@ -221,6 +243,9 @@ installBinary(){
         break ;;
       "16")
         pg_version="16"
+        break ;;
+      "17")
+        pg_version="17"
         break ;;
       *)
         echo "Invalid Choice! Please use 1 for v14, 2 for v15 and 3 for v16"
@@ -245,68 +270,90 @@ installBinary(){
 }
 
 
-echo -e "=========================================================\n"
-
-echo -e "Hi there!
-
-Welcome to ParadeDB, an open-source alternative to Elasticsearch built on Postgres.\nThis script will guide you through installing ParadeDB.
-
-ParadeDB is available as a Kubernetes Helm chart, a Docker image, and as prebuilt binaries for Debian-based and Red Hat-based Linux distributions.\nHow would you like to install ParadeDB?"
-
-
-echo -e "=========================================================\n"
 
 
 
+
+########################################
+# Main Loop
+########################################
+
+echo -e ""
+echo -e "  _____                    _      _____  ____     "
+echo -e " |  __ \                  | |    |  __ \|  _ \    "
+echo -e " | |__) |_ _ _ __ __ _  __| | ___| |  | | |_) |   "
+echo -e " |  ___/ _\` | '__/ _\` |/ _\` |/ _ \ |  | |  _ < "
+echo -e " | |  | (_| | | | (_| | (_| |  __/ |__| | |_) |   "
+echo -e " |_|   \__,_|_|  \__,_|\__,_|\___|_____/|____/    "                                     
+echo -e ""
+echo -e ""
+echo -e "🚀 Welcome to ParadeDB Installation Script 🚀"
+echo -e ""
+echo -e "ParadeDB is an alternative to Elasticsearch build as a Postgres extension."
+echo -e "It is available as prebuilt binaries for installing in a self-hosted Postgres instance, as a Docker image, and as a Helm chart for deployment on Kubernetes."
+echo -e ""
+echo -e "To deploy on Kubernetes, please refer to our documentation: https://docs.paradedb.com/deploy/overview"
+echo -e "Otherwise, please select an installation method below."
+echo -e ""
+
+# On Windows, only Docker is supported
 if [[ "$OSTYPE" = "msys" ]] || [[ "$OSTYPE" = "cygwin" ]]; then
-  echo "We do not support any prebuilt binary files for Windows."
-  read -r -p "Would you like to continue with the docker setup? [y/N] " response
-
+  echo "Operating system detected: Windows"
+  read -r -p "Please note that only Docker is supported on Windows. Continue with the Docker setup? [y/N]" response
   case "$response" in
     [yY][eE][sS]|[yY])
-      # installDocker
-      echo -e "Installation Successful ✅\n"
+      installDocker
   esac
-
-  echo -e "$EXIT_MSG"
-  exit 0
-
+# On macOS, both Docker and prebuilt binaries are supported
 elif [[ "$OSTYPE" = "darwin"* ]]; then
-  echo "We do not support any prebuilt binaries for MacOS. You can either compile paradedb from source or use our docker image."
-  read -r -p "Would you like to continue with the docker setup? [y/N] " response
+  echo "Operating system detected: macOS"
+  echo "On macOS, ParadeDB is available via Docker or as prebuilt .dylib Postgres extension binaries."
 
-  case "$response" in
-    [yY][eE][sS]|[yY])
-      # installDocker
-      echo -e "Installation Successful ✅\n"
-  esac
+  OPTIONS=("Docker" "Extension Binary")
+  select opt in "${OPTIONS[@]}"
+  do
+    case $opt in
+      "Docker")
+        installDocker
+        break ;;
+      "Extension Binary")
+        installBinary
+        break ;;
+      *)
+        echo "Invalid option. Exiting..."
+        break ;;
+    esac
+  done
+# On Linux, both Docker and prebuilt binaries are supported
+else
+  # TODO: Detect the sub-Linux version
+  echo "Operating system detected: Linux"
+  echo "On Linux, ParadeDB is available via Docker or as prebuilt .deb or .rpm Postgres extension binaries."
 
-  echo -e "$EXIT_MSG"
-  exit 0
+  # TODO: Can probably turn this onto a helper function to avoid duplicating too.
+  OPTIONS=("Docker" "Extension Binary")
+  select opt in "${OPTIONS[@]}"
+  do
+    case $opt in
+      "Docker")
+        installDocker
+        break ;;
+      "Extension Binary")
+        installBinary
+        break ;;
+      *)
+        echo "Invalid option. Exiting..."
+        break ;;
+    esac
+  done
 fi
 
-
-# Installation for Linux
-OPTIONS=("🐳Latest Docker Image" "⬇️ Stable Binary")
-
-
-select opt in "${OPTIONS[@]}"
-do
-  case $opt in
-    "🐳Latest Docker Image")
-      installDocker
-      echo -e "Installation Successful ✅\n"
-      break ;;
-    "⬇️ Stable Binary")
-      echo "Stable"
-      installBinary
-      echo -e "Installation Successful ✅\n"
-      break ;;
-    *)
-      echo -e "No option selected, exiting setup.\n"
-      break ;;
-  esac
-done
-
-
-echo -e "$EXIT_MSG"
+# Exit message
+echo -e ""
+echo -e "✅ Installation complete."
+echo -e ""
+echo -e "Thank you for installing ParadeDB! 🎉"
+echo -e "To get started, please refer to our quickstart tutorial: https://docs.paradedb.com/documentation/getting-started/quickstart"
+echo -e "To stay up to date and get help, please join our Slack community: https://join.slack.com/t/paradedbcommunity/shared_invite/zt-2lkzdsetw-OiIgbyFeiibd1DG~6wFgTQ"
+echo -e "And don't forget to star us on GitHub: https://github.com/paradedb/paradedb"
+echo -e ""
