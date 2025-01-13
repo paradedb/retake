@@ -13,7 +13,6 @@ ARCH=$(uname -m)
 LATEST_RELEASE_TAG=$(curl -s "https://api.github.com/repos/paradedb/paradedb/releases/latest" | jq -r .tag_name)
 LATEST_RELEASE_VERSION="${LATEST_RELEASE_TAG#v}"
 
-
 ########################################
 # Helper Functions
 ########################################
@@ -54,19 +53,6 @@ selectInstallationMethod() {
   done
 }
 
-# Determines linux base distro and installs docker accordingly
-installDockerDepsLinux() {
-  read -r -p "Would you like us to proceed with installing Docker on your system?\nIf you prefer to install Docker manually, please exit now and return once the installation is complete. [Y/n] " response
-  case "$response" in
-    [nN][oO]|[nN])
-    exit 1;
-  esac
-
-  # Uses the docker installation script
-  sh <(curl https://get.docker.com)
-}
-
-
 installDocker() {
   # Set default values
   pguser="myuser"
@@ -74,20 +60,8 @@ installDocker() {
   dbname="paradedb"
 
   if ! commandExists docker; then
-    if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
-      echo -e "\nPlease install Docker first and get back to the setup!"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-      echo -e "Please install docker from: https://docs.docker.com/desktop/install/mac-install/ before proceeding with the installation."
-      echo -e "$EXIT_MSG"
+      echo -e "\n\nDocker not found!\nPlease install docker to continue with the setup."
       exit 0
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-      installDockerDepsLinux
-      sudo systemctl enable --now docker
-      echo "Successfully Installed Docker ✅"
-    else
-      echo "Unsupported OS type: $OSTYPE"
-      exit 1
-    fi
   fi
 
 
