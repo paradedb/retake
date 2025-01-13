@@ -23,41 +23,55 @@ function commandExists() {
 }
 
 function setDebianDistroName() {
-    DEB_DISTRO_NAME=$(awk -F'[= ]' '/VERSION_CODENAME=/{print $2}'  /etc/os-release)
+  DEB_DISTRO_NAME=$(awk -F'[= ]' '/VERSION_CODENAME=/{print $2}'  /etc/os-release)
 }
 
-installDockerDepsLinux() {
-  echo "Please provide your Linux distribution to install Docker. If you prefer to install Docker manually, please exit now and come back after installation."
-  
-  OPTIONS=("Debian/Ubuntu" "Red Hat/Fedora" "Arch Linux")
-  select opt in "${OPTIONS[@]}"
-  do
+function isRHEL() {
+  cat /etc/redhat-release >/dev/null 2>&1 
+}
+
+selectInstallationMethod() {
+  local os_type=$1
+  local binary_name=$2
+  echo "On $os_type, ParadeDB is available via Docker or as prebuilt $binary_name Postgres extension binaries."
+
+  OPTIONS=("Docker" "Extension Binary")
+  select opt in "${OPTIONS[@]}"; do
     case $opt in
-      "Debian/Ubuntu")
-        sudo apt-get install docker -y || false
-        break ;;
-      "Red Hat/Fedora")
-        sudo dnf install docker -y || false
-        break ;;
-      "Arch Linux")
-        sudo pacman -Su docker || false
-        break ;;
+      "Docker")
+        installDocker
+        break
+        ;;
+      "Extension Binary")
+        if [[ "$os_type" == "macOS" ]]; then
+          installMacBinary
+        else
+          installBinary
+        fi
+        break
+        ;;
       *)
-        break ;;
+        echo "Invalid option. Exiting..."
+        break
+        ;;
     esac
   done
+}
 
+# Determines linux base distro and installs docker accordingly
+installDockerDepsLinux() {
+  read -r -p "Would you like us to proceed with installing Docker on your system?\nIf you prefer to install Docker manually, please exit now and return once the installation is complete. [Y/n] " response
+  case "$response" in
+    [nN][oO]|[nN])
+    exit 1;
+  esac
+
+  # Uses the docker installation script
+  sh <(curl https://get.docker.com)
 }
 
 
-
-
-
-
-
-
-
-# TODO: This looks good, but could be cleaned up further. For instance, the commandExists should be checked
+# Checks commandExists only once
 # in the main loop to avoid the duplicate OS checking.
 installDocker() {
   # Set default values
@@ -65,29 +79,24 @@ installDocker() {
   pgpass="mypassword"
   dbname="paradedb"
 
-  if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
-    if ! commandExists docker; then
+  if ! commandExists docker; then
+    if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
       echo -e "\nPlease install Docker first and get back to the setup!"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+      echo -e "Please install docker from: https://docs.docker.com/desktop/install/mac-install/ before proceeding with the installation."
+      echo -e "$EXIT_MSG"
+      exit 0
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      installDockerDepsLinux
+      sudo systemctl enable --now docker
+      echo "Successfully Installed Docker ✅"
+    else
+      echo "Unsupported OS type: $OSTYPE"
       exit 1
-    fi
-  else
-    if ! commandExists docker; then
-      echo "Docker not found. Starting installation..."
-      if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo -e "Please install docker from: https://docs.docker.com/desktop/install/mac-install/ before proceeding with the installation."
-        echo -e "$EXIT_MSG"
-        exit 0
-      elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        installDockerDepsLinux
-        sudo systemctl enable --now docker
-        echo "Successfully Installed Docker ✅"
-      else
-        echo "Unsupported OS type: $OSTYPE"
-        exit 1
-      fi
     fi
   fi
 
+  # Continue docker install
   docker_version=$(docker --version)
   echo "Docker version: $docker_version ..."
   # Check if Docker daemon is running
@@ -207,7 +216,7 @@ installMacBinary(){
   done
 
   # Setup binary download URL
-  filename="pg_search@15--${LATEST_RELEASE_VERSION}.arm64_${MAC_NAME}.pkg"
+  filename="pg_search@${pg_version}--${LATEST_RELEASE_VERSION}.arm64_${MAC_NAME}.pkg"
   url="https://github.com/paradedb/paradedb/releases/download/${LATEST_RELEASE_VERSION}/"
 
   echo "Downloading ${url}"
@@ -225,7 +234,6 @@ installMacBinary(){
   echo "Installation completed successfully!"
 }
 
-# TODO: 
 installDeb(){
   # Install curl
   echo "Installing dependencies...."
@@ -239,6 +247,8 @@ installDeb(){
   # Confirm architecture
   if [ "$ARCH" = "x86_64" ]; then
     ARCH="amd64"
+  else
+    ARCH="arm64"
   fi
 
   # Sets the variable DEB_DISTRO_NAME according to release
@@ -278,7 +288,7 @@ installRPM(){
   done
 
   # Confirm architecture
-  if [ "$ARCH" = "x86_64" ]; then
+  if [ "$ARCH" != "x86_64" ]; then
     ARCH="aarch64"
   fi
 
@@ -294,7 +304,6 @@ installRPM(){
 }
 
 
-# TODO: This needs to be updated to also ask for the architecture (x86_64 vs arm64). Binaries are built for a specific version
 # Installs latest binary for ParadeDB
 installBinary(){
 
@@ -324,20 +333,13 @@ installBinary(){
   done
 
   # Select Base type
-  echo "Select supported file type: "
-  opts=(".deb" ".rpm")
-
-  select opt in "${opts[@]}"
-  do
-    case $opt in
-      ".deb")
-        installDeb $pg_version
-        break ;;
-      ".rpm")
-        installRPM $pg_version
-        break ;;
-    esac
-  done
+  if isRHEL; then
+    echo -e "ON RHEL"
+    installRPM $pg_version
+    # exit 1
+  else
+    installDeb $pg_version
+  fi
 }
 
 
@@ -380,45 +382,12 @@ if [[ "$OSTYPE" = "msys" ]] || [[ "$OSTYPE" = "cygwin" ]]; then
 # On macOS, both Docker and prebuilt binaries are supported
 elif [[ "$OSTYPE" = "darwin"* ]]; then
   echo "Operating system detected: macOS"
-  echo "On macOS, ParadeDB is available via Docker or as prebuilt .dylib Postgres extension binaries."
-
-  OPTIONS=("Docker" "Extension Binary")
-  select opt in "${OPTIONS[@]}"
-  do
-    case $opt in
-      "Docker")
-        installDocker
-        break ;;
-      "Extension Binary")
-        installMacBinary
-        break ;;
-      *)
-        echo "Invalid option. Exiting..."
-        break ;;
-    esac
-  done
+  selectInstallationMethod "macOS" ".dylib"
 # On Linux, both Docker and prebuilt binaries are supported
 else
-  # TODO: Detect the sub-Linux version
+  # Detect the sub-Linux version -> Added isRHEL to determine if base system is RHEL based
   echo "Operating system detected: Linux"
-  echo "On Linux, ParadeDB is available via Docker or as prebuilt .deb or .rpm Postgres extension binaries."
-
-  # TODO: Can probably turn this onto a helper function to avoid duplicating too.
-  OPTIONS=("Docker" "Extension Binary")
-  select opt in "${OPTIONS[@]}"
-  do
-    case $opt in
-      "Docker")
-        installDocker
-        break ;;
-      "Extension Binary")
-        installBinary
-        break ;;
-      *)
-        echo "Invalid option. Exiting..."
-        break ;;
-    esac
-  done
+  selectInstallationMethod "Linux" ".deb or .rpm"
 fi
 
 # Exit message
