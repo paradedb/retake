@@ -43,7 +43,6 @@ To get started, please visit our [documentation](https://docs.paradedb.com).
 
 ## Deploying ParadeDB
 
-For an interactive setup run the following in your terminal.
 
 ```bash
 sh <(curl https://www.paradedb.com)
