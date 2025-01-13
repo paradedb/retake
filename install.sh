@@ -108,7 +108,8 @@ installDocker() {
   fi
 
   if docker inspect "paradedb" > /dev/null 2>&1; then
-    echo -e "We found a previous paradedb container on your system.\nWe need to remove it to continue this setup."
+    echo -e "Existing ParadeDB Docker container found on your system. Please remove it or provide a different database name."
+    exit 1
   fi
 
   # Pull Docker image
