@@ -49,11 +49,6 @@ For an interactive setup run the following in your terminal.
 sh <(curl https://www.paradedb.com)
 ```
 
-**Note**: Currently we only support stable binaries for the following:
- - Debian based Linux Distributions(Debian 12, Ubuntu 22.04 & Ubuntu 24.04) 
- - RHEL based Linux Distributions(RHEL 8 & RHEL 9)
- - macOS Versions(Sonoma & Sequia)
-
 
 ### Extensions
 
