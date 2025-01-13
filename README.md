@@ -54,7 +54,6 @@ sh <(curl https://www.paradedb.com)
  - RHEL based Linux Distributions(RHEL 8 & RHEL 9)
  - macOS Versions(Sonoma & Sequia)
 
-You can also build ParadeDB from source if your operating system is not included in the list above.
 
 ### Extensions
 
