@@ -102,7 +102,7 @@ installDocker() {
     pgpass="$tmp_pgpass"
   fi
 
-  read -r -p "Name for your database (default: paradedb): " tmp_dbname
+  read -r -p "Name for ParadeDB database (default: paradedb): " tmp_dbname
   if [[ -n "$tmp_dbname" ]]; then
     dbname="$tmp_dbname"
   fi
