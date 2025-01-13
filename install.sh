@@ -67,8 +67,6 @@ installDockerDepsLinux() {
 }
 
 
-# Checks commandExists only once
-# in the main loop to avoid the duplicate OS checking.
 installDocker() {
   # Set default values
   pguser="myuser"
