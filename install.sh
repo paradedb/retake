@@ -209,7 +209,7 @@ installMacBinary(){
   curl -l "$url" > "$filename" || false
   echo "Binary Downloaded Successfully!🚀"
 
-  # TODO: Unpack PKG at the desired locations
+  # Unpack PKG at the desired locations
   echo "Installing $filename..."
   sudo installer -pkg "$filename" -target /
   if [[ $? -ne 0 ]]; then
@@ -265,14 +265,37 @@ installDeb(){
   sudo apt install ./"$filename" -y || false
 }
 
-# TODO: We also support EL8 and EL9, we should ask the user and have them install the right one
 # Installs latest RPM package
+# Supports EL8 and EL9, asks the user and have them install the right one
 installRPM(){
-  filename="pg_search_$1-$LATEST_RELEASE_VERSION-1PARADEDB.el9.${ARCH}.rpm"
-  url="https://github.com/paradedb/paradedb/releases/latest/download/${filename}"
+
   echo -e "Installing cURL"
   sudo dnf install curl || false
   echo "Successfully Installed cURL✅"
+
+  echo "Select your RHEL version(We currently support RHEL 8 & RHEL 9)"
+  rhel_versions=("RHEL 8" "RHEL 9")
+  selected_rhel_version=
+  select op in "${rhel_versions[@]}"
+  do
+    case $op in
+      "RHEL 8")
+        selected_rhel_version="el8"
+        break ;;
+      "RHEL 9")
+        selected_rhel_version="el9"
+        break ;;
+    esac
+  done
+
+  # Confirm architecture
+  if [ "$ARCH" = "x86_64" ]; then
+    ARCH="aarch64"
+  fi
+
+  filename="pg_search_$1-$LATEST_RELEASE_VERSION-1PARADEDB.${selected_rhel_version}.${ARCH}.rpm"
+  url="https://github.com/paradedb/paradedb/releases/latest/download/${filename}"
+
 
   echo "Downloading ${url}"
   curl -l "$url" > "$filename" || false
