@@ -13,12 +13,17 @@ ARCH=$(uname -m)
 LATEST_RELEASE_TAG=$(curl -s "https://api.github.com/repos/paradedb/paradedb/releases/latest" | jq -r .tag_name)
 LATEST_RELEASE_VERSION="${LATEST_RELEASE_TAG#v}"
 
+DEB_DISTRO_NAME=""
 ########################################
 # Helper Functions
 ########################################
 
 function commandExists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+function setDebianDistroName() {
+    DEB_DISTRO_NAME=$(awk -F'[= ]' '/VERSION_CODENAME=/{print $2}'  /etc/os-release)
 }
 
 installDockerDepsLinux() {
@@ -231,31 +236,15 @@ installDeb(){
 
   echo "Successfully Installed cURL✅"
 
-  # Get actual distribution name for suitable binary
-  echo "Select your distribution"
-  distros=("bookworm(Debian 12.0)" "jammy(Ubuntu 22.04)" "noble(Ubuntu 24.04)")
-  distro=
-  select op in "${distros[@]}"
-  do
-    case $op in
-      "bookworm(Debian 12.0)")
-        distro="bookworm"
-        break ;;
-      "jammy(Ubuntu 22.04)")
-        distro="jammy"
-        break ;;
-      "noble(Ubuntu 24.04)")
-        distro="noble"
-        break ;;
-    esac
-  done
-
   # Confirm architecture
   if [ "$ARCH" = "x86_64" ]; then
     ARCH="amd64"
   fi
 
-  filename="postgresql-$1-pg-search_${LATEST_RELEASE_VERSION}-1PARADEDB-${distro}_${ARCH}.deb"
+  # Sets the variable DEB_DISTRO_NAME according to release
+  setDebianDistroName
+
+  filename="postgresql-$1-pg-search_${LATEST_RELEASE_VERSION}-1PARADEDB-${DEB_DISTRO_NAME}_${ARCH}.deb"
   url="https://github.com/paradedb/paradedb/releases/latest/download/${filename}"
 
   echo "Downloading ${url}"
