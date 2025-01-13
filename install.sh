@@ -97,7 +97,7 @@ installDocker() {
     pguser="$tmp_pguser"
   fi
 
-  read -r -p "Password for Database (default: mypassword): " tmp_pgpass
+  read -r -p "Password for ParadeDB database (default: mypassword): " tmp_pgpass
   if [[ -n "$tmp_pgpass" ]]; then
     pgpass="$tmp_pgpass"
   fi
