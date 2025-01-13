@@ -43,22 +43,13 @@ To get started, please visit our [documentation](https://docs.paradedb.com).
 
 ## Deploying ParadeDB
 
-ParadeDB and its extensions can be deployed in one of two ways:
-
-- Docker image based on [Postgres](https://hub.docker.com/_/postgres) ([see deployment instructions](https://docs.paradedb.com/deploy/aws))
-- Kubernetes Helm chart based on [CloudNativePG](https://artifacthub.io/packages/helm/cloudnative-pg/cloudnative-pg) ([see deployment instructions](https://docs.paradedb.com/deploy/helm))
-
-For more information, including enterprise features and support, please [contact us by email](mailto:sales@paradedb.com).
-
-### Using the Setup Script
-
 For an interactive setup run the following in your terminal.
 
 ```bash
 sh <(curl https://www.paradedb.com)
 ```
 
-**Note**: Currently we only support stable binaries for Debian and RHEL based linux distributions. For other Linux/Unix based Operating systems you'll need to build ParadeDB from source.
+**Note**: Currently we only support stable binaries for Debian & RHEL based linux distributions and MacOS. For other Linux/Unix based Operating systems you'll need to build ParadeDB from source.
 
 ### Extensions
 
