@@ -90,16 +90,6 @@ installDocker() {
     fi
   fi
 
-  # Continue docker install
-  docker_version=$(docker --version)
-  echo "Docker version: $docker_version ..."
-  # Check if Docker daemon is running
-  if docker info >/dev/null 2>&1; then
-    echo "Docker daemon is running. Pulling image..."
-  else
-    echo "Docker daemon is not running. Please run it to pull the ParadeDB image."
-    exit 1
-  fi
 
   # Prompt for user input
   read -r -p "Username for Database (default: myuser): " tmp_pguser
