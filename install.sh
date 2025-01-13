@@ -92,7 +92,7 @@ installDocker() {
 
 
   # Prompt for user input
-  read -r -p "Username for Database (default: myuser): " tmp_pguser
+  read -r -p "Username for ParadeDB database (default: myuser): " tmp_pguser
   if [[ -n "$tmp_pguser" ]]; then
     pguser="$tmp_pguser"
   fi
