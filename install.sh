@@ -13,17 +13,13 @@ ARCH=$(uname -m)
 LATEST_RELEASE_TAG=$(curl -s "https://api.github.com/repos/paradedb/paradedb/releases/latest" | jq -r .tag_name)
 LATEST_RELEASE_VERSION="${LATEST_RELEASE_TAG#v}"
 
-DEB_DISTRO_NAME=""
+
 ########################################
 # Helper Functions
 ########################################
 
 function commandExists() {
   command -v "$1" >/dev/null 2>&1
-}
-
-function setDebianDistroName() {
-  DEB_DISTRO_NAME=$(awk -F'[= ]' '/VERSION_CODENAME=/{print $2}'  /etc/os-release)
 }
 
 function isRHEL() {
@@ -237,12 +233,15 @@ installMacBinary(){
 installDeb(){
   # Install curl
   echo "Installing dependencies...."
-  echo "Installing cURL"
 
-  sudo apt-get update -y || false
-  sudo apt-get install curl -y || false
-
-  echo "Successfully Installed cURL✅"
+  # Not required ----
+  # echo "Installing cURL"
+  #
+  # sudo apt-get update -y || false
+  # sudo apt-get install curl -y || false
+  #
+  # echo "Successfully Installed cURL✅"
+  # -----------------
 
   # Confirm architecture
   if [ "$ARCH" = "x86_64" ]; then
@@ -252,7 +251,7 @@ installDeb(){
   fi
 
   # Sets the variable DEB_DISTRO_NAME according to release
-  setDebianDistroName
+  DEB_DISTRO_NAME=$(awk -F'[= ]' '/VERSION_CODENAME=/{print $2}'  /etc/os-release)
 
   filename="postgresql-$1-pg-search_${LATEST_RELEASE_VERSION}-1PARADEDB-${DEB_DISTRO_NAME}_${ARCH}.deb"
   url="https://github.com/paradedb/paradedb/releases/latest/download/${filename}"
@@ -268,31 +267,21 @@ installDeb(){
 # Supports EL8 and EL9, asks the user and have them install the right one
 installRPM(){
 
-  echo -e "Installing cURL"
-  sudo dnf install curl || false
-  echo "Successfully Installed cURL✅"
+  # Not required ---------------------
+  # echo -e "Installing cURL"
+  # sudo dnf install curl || false
+  # echo "Successfully Installed cURL✅"
+  # ----------------------------------
 
-  echo "Select your RHEL version(We currently support RHEL 8 & RHEL 9)"
-  rhel_versions=("RHEL 8" "RHEL 9")
-  selected_rhel_version=
-  select op in "${rhel_versions[@]}"
-  do
-    case $op in
-      "RHEL 8")
-        selected_rhel_version="el8"
-        break ;;
-      "RHEL 9")
-        selected_rhel_version="el9"
-        break ;;
-    esac
-  done
+  # gives version number like 8 or 9
+  rhel_version=$(awk -F'[. ]' '/release/{print $6}' /etc/redhat-release)
 
   # Confirm architecture
   if [ "$ARCH" != "x86_64" ]; then
     ARCH="aarch64"
   fi
 
-  filename="pg_search_$1-$LATEST_RELEASE_VERSION-1PARADEDB.${selected_rhel_version}.${ARCH}.rpm"
+  filename="pg_search_$1-$LATEST_RELEASE_VERSION-1PARADEDB.el${rhel_version}.${ARCH}.rpm"
   url="https://github.com/paradedb/paradedb/releases/latest/download/${filename}"
 
 
