@@ -20,8 +20,12 @@ use crate::postgres::types::TantivyValue;
 use crate::schema::{SearchDocument, SearchField, SearchIndexSchema};
 use anyhow::{anyhow, Result};
 use chrono::{NaiveDate, NaiveTime};
+use pg_sys::Oid;
 use pgrx::itemptr::{item_pointer_get_both, item_pointer_set_all};
-use pgrx::*;
+use pgrx::{
+    pg_sys::{PgBuiltInOids, PgOid},
+    *,
+};
 use std::str::FromStr;
 
 /// Finds and returns the `USING bm25` index on the specified relation with the
@@ -108,10 +112,8 @@ pub fn categorize_fields(
                 (attribute_type_oid, false)
             };
 
-            let is_json = matches!(
-                base_oid,
-                PgOid::BuiltIn(pg_sys::BuiltinOid::JSONBOID | pg_sys::BuiltinOid::JSONOID)
-            );
+            let is_json = base_oid.is_coercible_to(PgBuiltInOids::JSONBOID)
+                || base_oid.is_coercible_to(PgBuiltInOids::JSONOID);
 
             categorized_fields.push((
                 search_field.clone(),
@@ -268,5 +270,34 @@ pub fn convert_pg_date_string(typeoid: PgOid, date_string: &str) -> tantivy::Dat
             tantivy::DateTime::from_timestamp_micros(micros)
         }
         _ => panic!("Unsupported typeoid: {typeoid:?}"),
+    }
+}
+
+pub trait CoercibleTo {
+    fn is_coercible_to(&self, builtin: PgBuiltInOids) -> bool;
+}
+
+impl CoercibleTo for PgBuiltInOids {
+    #[inline(always)]
+    fn is_coercible_to(&self, builtin: PgBuiltInOids) -> bool {
+        *self == builtin
+    }
+}
+
+impl CoercibleTo for Oid {
+    #[inline(always)]
+    fn is_coercible_to(&self, builtin: PgBuiltInOids) -> bool {
+        unsafe { pg_sys::IsBinaryCoercible(*self, builtin.value()) }
+    }
+}
+
+impl CoercibleTo for PgOid {
+    #[inline(always)]
+    fn is_coercible_to(&self, builtin: PgBuiltInOids) -> bool {
+        match self {
+            PgOid::BuiltIn(b) => b.is_coercible_to(builtin),
+            PgOid::Custom(custom) => custom.is_coercible_to(builtin),
+            PgOid::Invalid => false,
+        }
     }
 }

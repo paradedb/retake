@@ -33,7 +33,7 @@ use tantivy::schema::{
 use thiserror::Error;
 use tokenizers::{SearchNormalizer, SearchTokenizer};
 
-use crate::postgres::index::get_fields;
+use crate::postgres::{index::get_fields, utils::CoercibleTo};
 use crate::query::AsFieldType;
 pub use anyenum::AnyEnum;
 
@@ -66,7 +66,7 @@ pub enum SearchFieldType {
 impl TryFrom<&PgOid> for SearchFieldType {
     type Error = SearchIndexSchemaError;
     fn try_from(pg_oid: &PgOid) -> Result<Self, Self::Error> {
-        match &pg_oid {
+        match pg_oid {
             PgOid::BuiltIn(builtin) => match builtin {
                 PgBuiltInOids::TEXTOID | PgBuiltInOids::VARCHAROID | PgBuiltInOids::UUIDOID => {
                     Ok(SearchFieldType::Text)
@@ -94,8 +94,46 @@ impl TryFrom<&PgOid> for SearchFieldType {
                 _ => Err(SearchIndexSchemaError::InvalidPgOid(*pg_oid)),
             },
             PgOid::Custom(custom) => {
+                // If the custom type is either an enum or something that is coercible to one of our
+                // supported built-in types, such as a domain, we can use it.
                 if unsafe { pgrx::pg_sys::type_is_enum(*custom) } {
                     Ok(SearchFieldType::F64)
+                } else if custom.is_coercible_to(PgBuiltInOids::TEXTOID)
+                    || custom.is_coercible_to(PgBuiltInOids::VARCHAROID)
+                    || custom.is_coercible_to(PgBuiltInOids::UUIDOID)
+                {
+                    Ok(SearchFieldType::Text)
+                } else if custom.is_coercible_to(PgBuiltInOids::INT2OID)
+                    || custom.is_coercible_to(PgBuiltInOids::INT4OID)
+                    || custom.is_coercible_to(PgBuiltInOids::INT8OID)
+                {
+                    Ok(SearchFieldType::I64)
+                } else if custom.is_coercible_to(PgBuiltInOids::FLOAT4OID)
+                    || custom.is_coercible_to(PgBuiltInOids::FLOAT8OID)
+                    || custom.is_coercible_to(PgBuiltInOids::NUMERICOID)
+                {
+                    Ok(SearchFieldType::F64)
+                } else if custom.is_coercible_to(PgBuiltInOids::BOOLOID) {
+                    Ok(SearchFieldType::Bool)
+                } else if custom.is_coercible_to(PgBuiltInOids::JSONOID)
+                    || custom.is_coercible_to(PgBuiltInOids::JSONBOID)
+                {
+                    Ok(SearchFieldType::Json)
+                } else if custom.is_coercible_to(PgBuiltInOids::INT4RANGEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::INT8RANGEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::NUMRANGEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::DATERANGEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TSRANGEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TSTZRANGEOID)
+                {
+                    Ok(SearchFieldType::Range)
+                } else if custom.is_coercible_to(PgBuiltInOids::DATEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TIMESTAMPOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TIMESTAMPTZOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TIMEOID)
+                    || custom.is_coercible_to(PgBuiltInOids::TIMETZOID)
+                {
+                    Ok(SearchFieldType::Date)
                 } else {
                     Err(SearchIndexSchemaError::InvalidPgOid(*pg_oid))
                 }

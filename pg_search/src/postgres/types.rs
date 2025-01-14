@@ -17,6 +17,7 @@
 
 use crate::postgres::datetime::{datetime_components_to_tantivy_date, MICROSECONDS_IN_SECOND};
 use crate::postgres::range::RangeToTantivyValue;
+use crate::postgres::utils::CoercibleTo;
 use crate::schema::AnyEnum;
 use ordered_float::OrderedFloat;
 use pgrx::datum::datetime_support::DateTimeConversionError;
@@ -110,35 +111,41 @@ impl TantivyValue {
         datum: Datum,
         oid: PgOid,
     ) -> Result<Vec<Self>, TantivyValueError> {
-        match &oid {
-            PgOid::BuiltIn(builtin) => match builtin {
-                PgBuiltInOids::BOOLOID
-                | PgBuiltInOids::INT2OID
-                | PgBuiltInOids::INT4OID
-                | PgBuiltInOids::INT8OID
-                | PgBuiltInOids::OIDOID
-                | PgBuiltInOids::FLOAT4OID
-                | PgBuiltInOids::FLOAT8OID
-                | PgBuiltInOids::NUMERICOID
-                | PgBuiltInOids::TEXTOID
-                | PgBuiltInOids::VARCHAROID
-                | PgBuiltInOids::DATEOID
-                | PgBuiltInOids::TIMESTAMPOID
-                | PgBuiltInOids::TIMESTAMPTZOID
-                | PgBuiltInOids::TIMEOID
-                | PgBuiltInOids::TIMETZOID
-                | PgBuiltInOids::UUIDOID => {
-                    let array: pgrx::Array<Datum> = pgrx::Array::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?;
-                    array
-                        .iter()
-                        .flatten()
-                        .map(|element_datum| Self::try_from_datum(element_datum, oid))
-                        .collect()
-                }
-                _ => Err(TantivyValueError::UnsupportedArrayOid(oid.value())),
-            },
-            _ => Err(TantivyValueError::InvalidOid),
+        const SUPPORTED_ARRAY_OIDS: &[PgBuiltInOids] = &[
+            PgBuiltInOids::BOOLOID,
+            PgBuiltInOids::INT2OID,
+            PgBuiltInOids::INT4OID,
+            PgBuiltInOids::INT8OID,
+            PgBuiltInOids::OIDOID,
+            PgBuiltInOids::FLOAT4OID,
+            PgBuiltInOids::FLOAT8OID,
+            PgBuiltInOids::NUMERICOID,
+            PgBuiltInOids::TEXTOID,
+            PgBuiltInOids::VARCHAROID,
+            PgBuiltInOids::DATEOID,
+            PgBuiltInOids::TIMESTAMPOID,
+            PgBuiltInOids::TIMESTAMPTZOID,
+            PgBuiltInOids::TIMEOID,
+            PgBuiltInOids::TIMETZOID,
+            PgBuiltInOids::UUIDOID,
+        ];
+
+        let is_supported_array_oid = SUPPORTED_ARRAY_OIDS
+            .iter()
+            .any(|&builtin| oid.is_coercible_to(builtin));
+
+        if let PgOid::Invalid = oid {
+            Err(TantivyValueError::InvalidOid)
+        } else if is_supported_array_oid {
+            let array: pgrx::Array<Datum> =
+                pgrx::Array::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?;
+            array
+                .iter()
+                .flatten()
+                .map(|element_datum| Self::try_from_datum(element_datum, oid))
+                .collect()
+        } else {
+            Err(TantivyValueError::UnsupportedArrayOid(oid.value()))
         }
     }
 
@@ -146,126 +153,139 @@ impl TantivyValue {
         datum: Datum,
         oid: PgOid,
     ) -> Result<Vec<Self>, TantivyValueError> {
-        match &oid {
-            PgOid::BuiltIn(builtin) => match builtin {
-                // Tantivy has a limitation that prevents JSON top-level arrays from being
-                // inserted into the index. Therefore, we need to flatten the array elements
-                // individually before converting them into Tantivy values.
-                PgBuiltInOids::JSONBOID => {
-                    let pgrx_value = pgrx::JsonB::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?;
-                    let json_value: Value =
-                        serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value))
-                }
-                PgBuiltInOids::JSONOID => {
-                    let pgrx_value = pgrx::Json::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?;
-                    let json_value: Value =
-                        serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value))
-                }
-                _ => Err(TantivyValueError::UnsupportedJsonOid(oid.value())),
-            },
-            _ => Err(TantivyValueError::InvalidOid),
+        // Tantivy has a limitation that prevents JSON top-level arrays from being
+        // inserted into the index. Therefore, we need to flatten the array elements
+        // individually before converting them into Tantivy values.
+        if oid.is_coercible_to(PgBuiltInOids::JSONBOID) {
+            let pgrx_value =
+                pgrx::JsonB::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?;
+            let json_value: Value = serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
+            Ok(Self::json_value_to_tantivy_value(json_value))
+        } else if oid.is_coercible_to(PgBuiltInOids::JSONOID) {
+            let pgrx_value =
+                pgrx::Json::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?;
+            let json_value: Value = serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
+            Ok(Self::json_value_to_tantivy_value(json_value))
+        } else if matches!(oid, PgOid::BuiltIn(_)) {
+            // Any other built-in type is not supported as JSON.
+            Err(TantivyValueError::UnsupportedJsonOid(oid.value()))
+        } else {
+            Err(TantivyValueError::InvalidOid)
         }
     }
 
     pub unsafe fn try_from_datum(datum: Datum, oid: PgOid) -> Result<Self, TantivyValueError> {
-        match &oid {
-            PgOid::BuiltIn(builtin) => match builtin {
-                PgBuiltInOids::BOOLOID => TantivyValue::try_from(
-                    bool::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::INT2OID => TantivyValue::try_from(
-                    i16::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::INT4OID => TantivyValue::try_from(
-                    i32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::INT8OID => TantivyValue::try_from(
-                    i64::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::OIDOID => TantivyValue::try_from(
-                    u32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::FLOAT4OID => TantivyValue::try_from(
-                    f32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::FLOAT8OID => TantivyValue::try_from(
-                    f64::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::NUMERICOID => TantivyValue::try_from(
-                    pgrx::AnyNumeric::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TEXTOID | PgBuiltInOids::VARCHAROID => TantivyValue::try_from(
-                    String::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::DATEOID => TantivyValue::try_from(
-                    pgrx::datum::Date::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TIMESTAMPOID => TantivyValue::try_from(
-                    pgrx::datum::Timestamp::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TIMESTAMPTZOID => TantivyValue::try_from(
-                    pgrx::datum::TimestampWithTimeZone::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TIMEOID => TantivyValue::try_from(
-                    pgrx::datum::Time::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TIMETZOID => TantivyValue::try_from(
-                    pgrx::datum::TimeWithTimeZone::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::UUIDOID => TantivyValue::try_from(
-                    pgrx::datum::Uuid::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::INT4RANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<i32>::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::INT8RANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<i64>::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::NUMRANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<pgrx::AnyNumeric>::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::DATERANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<pgrx::datum::Date>::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TSRANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<pgrx::datum::Timestamp>::from_datum(datum, false)
-                        .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                PgBuiltInOids::TSTZRANGEOID => TantivyValue::from_range(
-                    pgrx::datum::Range::<pgrx::datum::TimestampWithTimeZone>::from_datum(
-                        datum, false,
-                    )
-                    .ok_or(TantivyValueError::DatumDeref)?,
-                ),
-                _ => Err(TantivyValueError::UnsupportedOid(oid.value())),
-            },
+        match oid {
             PgOid::Custom(custom) => {
-                if pgrx::pg_sys::type_is_enum(*custom) {
+                if pgrx::pg_sys::type_is_enum(custom) {
                     let (_, _, ordinal) = pgrx::enum_helper::lookup_enum_by_oid(
                         pgrx::pg_sys::Oid::from_datum(datum, false)
                             .ok_or(TantivyValueError::DatumDeref)?,
                     );
-                    TantivyValue::try_from(ordinal)
-                } else {
-                    Err(TantivyValueError::UnsupportedOid(oid.value()))
+                    return TantivyValue::try_from(ordinal);
                 }
             }
-            _ => Err(TantivyValueError::InvalidOid),
+            PgOid::Invalid => return Err(TantivyValueError::InvalidOid),
+            _ => (),
+        }
+
+        if oid.is_coercible_to(PgBuiltInOids::BOOLOID) {
+            TantivyValue::try_from(
+                bool::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::INT2OID) {
+            TantivyValue::try_from(
+                i16::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::INT4OID) {
+            TantivyValue::try_from(
+                i32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::INT8OID) {
+            TantivyValue::try_from(
+                i64::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::OIDOID) {
+            TantivyValue::try_from(
+                u32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::FLOAT4OID) {
+            TantivyValue::try_from(
+                f32::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::FLOAT8OID) {
+            TantivyValue::try_from(
+                f64::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::NUMERICOID) {
+            TantivyValue::try_from(
+                pgrx::AnyNumeric::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TEXTOID)
+            || oid.is_coercible_to(PgBuiltInOids::VARCHAROID)
+        {
+            TantivyValue::try_from(
+                String::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::DATEOID) {
+            TantivyValue::try_from(
+                pgrx::datum::Date::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TIMESTAMPOID) {
+            TantivyValue::try_from(
+                pgrx::datum::Timestamp::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TIMESTAMPTZOID) {
+            TantivyValue::try_from(
+                pgrx::datum::TimestampWithTimeZone::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TIMEOID) {
+            TantivyValue::try_from(
+                pgrx::datum::Time::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TIMETZOID) {
+            TantivyValue::try_from(
+                pgrx::datum::TimeWithTimeZone::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::UUIDOID) {
+            TantivyValue::try_from(
+                pgrx::datum::Uuid::from_datum(datum, false).ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::INT4RANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<i32>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::INT8RANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<i64>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::NUMRANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<pgrx::AnyNumeric>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::DATERANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<pgrx::datum::Date>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TSRANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<pgrx::datum::Timestamp>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else if oid.is_coercible_to(PgBuiltInOids::TSTZRANGEOID) {
+            TantivyValue::from_range(
+                pgrx::datum::Range::<pgrx::datum::TimestampWithTimeZone>::from_datum(datum, false)
+                    .ok_or(TantivyValueError::DatumDeref)?,
+            )
+        } else {
+            Err(TantivyValueError::UnsupportedOid(oid.value()))
         }
     }
 
