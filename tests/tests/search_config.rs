@@ -509,3 +509,45 @@ fn language_stem_filter(mut conn: PgConnection) {
         .execute(&mut conn);
     }
 }
+
+#[rstest]
+fn stopwords_language_tokenizer_config(mut conn: PgConnection) {
+    r#"
+    CALL paradedb.create_bm25_test_table(table_name => 'bm25_search', schema_name => 'paradedb');
+
+    CREATE INDEX bm25_search_idx ON paradedb.bm25_search
+        USING bm25 (id, description)
+        WITH (key_field='id', text_fields='{"description": {"tokenizer": {"type": "default", "stopwords_language": "English"}}}');
+    "#
+    .execute(&mut conn);
+
+    let count: (i64,) = "
+    SELECT COUNT(*) FROM paradedb.bm25_search
+    WHERE bm25_search @@@ 'description:on'"
+        .fetch_one(&mut conn);
+    assert_eq!(count.0, 0);
+
+    let count: (i64,) = r#"
+    SELECT COUNT(*) FROM paradedb.bm25_search
+    WHERE bm25_search @@@ 'description:"Hardcover book on history"'"#
+        .fetch_one(&mut conn);
+    assert_eq!(count.0, 1);
+}
+
+#[rstest]
+fn stopwords_tokenizer_config(mut conn: PgConnection) {
+    r#"
+    CALL paradedb.create_bm25_test_table(table_name => 'bm25_search', schema_name => 'paradedb');
+
+    CREATE INDEX bm25_search_idx ON paradedb.bm25_search
+        USING bm25 (id, description)
+        WITH (key_field='id', text_fields='{"description": {"tokenizer": {"type": "default", "stopwords": ["shoes"]}}}');
+    "#
+    .execute(&mut conn);
+
+    let count: (i64,) = "
+    SELECT COUNT(*) FROM paradedb.bm25_search
+    WHERE bm25_search @@@ 'description:shoes'"
+        .fetch_one(&mut conn);
+    assert_eq!(count.0, 0);
+}
