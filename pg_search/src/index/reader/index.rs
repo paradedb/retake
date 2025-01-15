@@ -30,7 +30,6 @@ use rustc_hash::FxHashMap;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::iter::Flatten;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tantivy::collector::{Collector, TopDocs};
@@ -82,6 +81,7 @@ impl From<SortDirection> for Order {
     }
 }
 
+pub type FastFieldCache = FxHashMap<SegmentOrdinal, FFType>;
 /// An iterator of the different styles of search results we can return
 #[allow(clippy::large_enum_variant)]
 #[derive(Default)]
@@ -90,29 +90,26 @@ pub enum SearchResults {
     None,
     TopNByScore(
         Searcher,
-        FxHashMap<SegmentOrdinal, FFType>,
+        FastFieldCache,
         std::vec::IntoIter<(Score, DocAddress)>,
     ),
     TopNByTweakedScore(
         Searcher,
-        FxHashMap<SegmentOrdinal, FFType>,
+        FastFieldCache,
         std::vec::IntoIter<(TweakedScore, DocAddress)>,
     ),
     TopNByField(
         Searcher,
-        FxHashMap<SegmentOrdinal, FFType>,
+        FastFieldCache,
         std::vec::IntoIter<(TermOrdinal, DocAddress)>,
     ),
     SingleSegment(
         Searcher,
-        FxHashMap<SegmentOrdinal, FFType>,
+        SegmentOrdinal,
+        Option<FFType>,
         scorer_iter::ScorerIter,
     ),
-    AllSegments(
-        Searcher,
-        FxHashMap<SegmentOrdinal, FFType>,
-        Flatten<std::vec::IntoIter<scorer_iter::ScorerIter>>,
-    ),
+    AllSegments(Searcher, Option<FFType>, Vec<scorer_iter::ScorerIter>),
 }
 
 #[derive(PartialEq, Clone)]
@@ -150,12 +147,48 @@ impl Iterator for SearchResults {
                 let (_, doc_id) = iter.next()?;
                 (searcher, ff_lookup, (1.0, doc_id))
             }
-            SearchResults::SingleSegment(searcher, ff_lookup, iter) => {
-                (searcher, ff_lookup, iter.next()?)
+            SearchResults::SingleSegment(searcher, segment_ord, fftype, iter) => {
+                let (score, doc_address) = iter.next()?;
+                let ctid_ff = fftype.get_or_insert_with(|| {
+                    FFType::new(searcher.segment_reader(*segment_ord).fast_fields(), "ctid")
+                });
+                let scored = SearchIndexScore {
+                    ctid: ctid_ff
+                        .as_u64(doc_address.doc_id)
+                        .expect("ctid should be present"),
+                    bm25: score,
+                };
+                return Some((scored, doc_address));
             }
-            SearchResults::AllSegments(searcher, ff_lookup, iter) => {
-                (searcher, ff_lookup, iter.next()?)
-            }
+            SearchResults::AllSegments(searcher, fftype, iters) => loop {
+                let last = iters.last_mut()?;
+                match last.next() {
+                    Some((score, doc_address)) => {
+                        let ctid_ff = fftype.get_or_insert_with(|| {
+                            FFType::new(
+                                searcher
+                                    .segment_reader(doc_address.segment_ord)
+                                    .fast_fields(),
+                                "ctid",
+                            )
+                        });
+                        let scored = SearchIndexScore {
+                            ctid: ctid_ff
+                                .as_u64(doc_address.doc_id)
+                                .expect("ctid should be present"),
+                            bm25: score,
+                        };
+                        return Some((scored, doc_address));
+                    }
+                    None => {
+                        // last iterator is empty, so pop it off, clear the fast field type cache,
+                        // and loop back around to get the next one
+                        iters.pop();
+                        *fftype = None;
+                        continue;
+                    }
+                }
+            },
         };
 
         let ctid_ff = ff_lookup.entry(doc_address.segment_ord).or_insert_with(|| {
@@ -182,8 +215,14 @@ impl Iterator for SearchResults {
             SearchResults::TopNByScore(_, _, iter) => iter.size_hint(),
             SearchResults::TopNByTweakedScore(_, _, iter) => iter.size_hint(),
             SearchResults::TopNByField(_, _, iter) => iter.size_hint(),
-            SearchResults::SingleSegment(_, _, iter) => iter.size_hint(),
-            SearchResults::AllSegments(_, _, iter) => iter.size_hint(),
+            SearchResults::SingleSegment(_, _, _, iter) => iter.size_hint(),
+            SearchResults::AllSegments(_, _, iters) => {
+                let hint = iters
+                    .first()
+                    .map(|iter| iter.size_hint())
+                    .unwrap_or((0, Some(0)));
+                (hint.0, hint.1.map(|n| n * iters.len()))
+            }
         }
     }
 
@@ -196,8 +235,10 @@ impl Iterator for SearchResults {
             SearchResults::TopNByScore(_, _, iter) => iter.count(),
             SearchResults::TopNByTweakedScore(_, _, iter) => iter.count(),
             SearchResults::TopNByField(_, _, iter) => iter.count(),
-            SearchResults::SingleSegment(_, _, iter) => iter.count(),
-            SearchResults::AllSegments(_, _, iter) => iter.count(),
+            SearchResults::SingleSegment(_, _, _, iter) => iter.count(),
+            SearchResults::AllSegments(_, _, iters) => {
+                iters.into_iter().map(|iter| iter.count()).sum()
+            }
         }
     }
 }
@@ -370,11 +411,7 @@ impl SearchIndexReader {
             })
             .collect::<Vec<_>>();
 
-        SearchResults::AllSegments(
-            self.searcher.clone(),
-            Default::default(),
-            iters.into_iter().flatten(),
-        )
+        SearchResults::AllSegments(self.searcher.clone(), Default::default(), iters)
     }
 
     /// Search a specific index segment for matching documents.
@@ -396,7 +433,7 @@ impl SearchIndexReader {
             segment_ord,
             segment_reader.clone(),
         );
-        SearchResults::SingleSegment(self.searcher.clone(), Default::default(), iter)
+        SearchResults::SingleSegment(self.searcher.clone(), segment_ord, None, iter)
     }
 
     /// Search the Tantivy index for the "top N" matching documents.
@@ -524,11 +561,7 @@ impl SearchIndexReader {
                         )
                     })
                     .collect::<Vec<_>>();
-                SearchResults::AllSegments(
-                    self.searcher.clone(),
-                    Default::default(),
-                    iters.into_iter().flatten(),
-                )
+                SearchResults::AllSegments(self.searcher.clone(), Default::default(), iters)
             }
         }
     }
@@ -661,7 +694,7 @@ impl SearchIndexReader {
                     segment_ord,
                     segment_reader.clone(),
                 );
-                SearchResults::SingleSegment(self.searcher.clone(), Default::default(), iter)
+                SearchResults::SingleSegment(self.searcher.clone(), segment_ord, None, iter)
             }
         }
     }
@@ -763,10 +796,12 @@ mod scorer_iter {
     }
 
     impl DocSet for DeferredScorer {
+        #[inline(always)]
         fn advance(&mut self) -> DocId {
             self.scorer_mut().advance()
         }
 
+        #[inline(always)]
         fn doc(&self) -> DocId {
             self.scorer().doc()
         }
@@ -777,6 +812,7 @@ mod scorer_iter {
     }
 
     impl Scorer for DeferredScorer {
+        #[inline(always)]
         fn score(&mut self) -> Score {
             self.scorer_mut().score()
         }
@@ -834,7 +870,6 @@ mod scorer_iter {
 
                 // this doc isn't alive, move to the next doc and loop around
                 self.deferred.advance();
-                continue;
             }
         }
 

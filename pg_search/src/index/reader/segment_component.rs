@@ -11,9 +11,9 @@ use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
 use tantivy::HasLen;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SegmentComponentReader {
-    block_list: Arc<LinkedBytesList>,
+    block_list: LinkedBytesList,
     npages: Arc<AtomicU32>,
     last_blockno: Arc<AtomicU32>,
     entry: FileEntry,
@@ -24,7 +24,7 @@ impl SegmentComponentReader {
         let block_list = LinkedBytesList::open(relation_oid, entry.staring_block);
 
         Self {
-            block_list: Arc::new(block_list),
+            block_list,
             entry,
             npages: Arc::new(AtomicU32::new(0)),
             last_blockno: Arc::new(AtomicU32::new(pg_sys::InvalidBlockNumber)),
@@ -62,6 +62,7 @@ impl SegmentComponentReader {
 
             if start_block_ordinal == self.npages() as usize {
                 // short-circuit for when the last block is being read -- this is a common access pattern
+
                 Ok(self.block_list.get_cached_range(self.last_blockno(), range))
             } else {
                 // read one or more pages

@@ -1,7 +1,6 @@
 use crate::postgres::storage::block::{BM25PageSpecialData, PgItem};
 use crate::postgres::storage::utils::{BM25BufferCache, BM25Page};
 use pgrx::pg_sys;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Buffer {
@@ -409,9 +408,9 @@ impl PageHeaderMethods for pg_sys::PageHeaderData {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BufferManager {
-    bcache: Arc<BM25BufferCache>,
+    bcache: BM25BufferCache,
 }
 
 impl BufferManager {

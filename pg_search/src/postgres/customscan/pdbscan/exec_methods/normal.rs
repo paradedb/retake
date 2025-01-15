@@ -115,30 +115,25 @@ impl ExecMethod for NormalScanExecState {
                 let mut tid = pg_sys::ItemPointerData::default();
                 u64_to_item_pointer(scored.ctid, &mut tid);
 
-                let slot = self.slot;
-                (*slot).tts_flags &= !pg_sys::TTS_FLAG_EMPTY as u16;
-                (*slot).tts_flags |= pg_sys::TTS_FLAG_SHOULDFREE as u16;
-                (*slot).tts_nvalid = 0;
-
                 let blockno = item_pointer_get_block_number(&tid);
-
                 let is_visible = if blockno == self.blockvis.0 {
                     // we know the visibility of this block because we just checked it last time
                     self.blockvis.1
                 } else {
                     // new block so check its visibility
                     self.blockvis.0 = blockno;
-                    self.blockvis.1 = is_block_all_visible(
-                        self.heaprel,
-                        &mut self.vmbuff,
-                        tid,
-                        (*self.heaprel).rd_id,
-                    );
+                    self.blockvis.1 = is_block_all_visible(self.heaprel, &mut self.vmbuff, blockno);
                     self.blockvis.1
                 };
 
                 if is_visible {
                     // everything on this block is visible
+
+                    let slot = self.slot;
+                    (*slot).tts_flags &= !pg_sys::TTS_FLAG_EMPTY as u16;
+                    (*slot).tts_flags |= pg_sys::TTS_FLAG_SHOULDFREE as u16;
+                    (*slot).tts_nvalid = 0;
+
                     ExecState::Virtual { slot }
                 } else {
                     // not sure about the block visibility so the tuple requires a heap check

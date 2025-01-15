@@ -63,7 +63,6 @@ use crate::schema::SearchIndexSchema;
 use crate::{nodecast, DEFAULT_STARTUP_COST, UNKNOWN_SELECTIVITY};
 use exec_methods::top_n::TopNScanExecState;
 use exec_methods::ExecState;
-use pgrx::itemptr::item_pointer_get_block_number;
 use pgrx::pg_sys::{AsPgCStr, CustomExecMethods};
 use pgrx::{direct_function_call, pg_sys, IntoDatum, PgList, PgMemoryContexts, PgRelation};
 use std::collections::HashMap;
@@ -969,12 +968,10 @@ pub fn text_lower_funcoid() -> pg_sys::Oid {
 pub fn is_block_all_visible(
     heaprel: pg_sys::Relation,
     vmbuff: &mut pg_sys::Buffer,
-    ctid: pg_sys::ItemPointerData,
-    heaprelid: pg_sys::Oid,
+    heap_blockno: pg_sys::BlockNumber,
 ) -> bool {
     unsafe {
-        let blockno = item_pointer_get_block_number(&ctid);
-        let status = pg_sys::visibilitymap_get_status(heaprel, blockno, vmbuff);
+        let status = pg_sys::visibilitymap_get_status(heaprel, heap_blockno, vmbuff);
         status != 0
     }
 }

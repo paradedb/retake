@@ -21,7 +21,6 @@ use pgrx::pg_sys;
 use pgrx::pg_sys::OffsetNumber;
 use pgrx::PgBox;
 use rustc_hash::FxHashMap;
-use std::sync::Arc;
 
 pub trait BM25Page {
     unsafe fn read_item<T: From<PgItem>>(
@@ -75,23 +74,23 @@ impl BM25Page for pg_sys::Page {
 pub struct BM25BufferCache {
     indexrel: PgBox<pg_sys::RelationData>,
     heaprel: PgBox<pg_sys::RelationData>,
-    cache: Arc<Mutex<FxHashMap<pg_sys::BlockNumber, Vec<u8>>>>,
+    cache: Mutex<FxHashMap<pg_sys::BlockNumber, Vec<u8>>>,
 }
 
 unsafe impl Send for BM25BufferCache {}
 unsafe impl Sync for BM25BufferCache {}
 
 impl BM25BufferCache {
-    pub fn open(indexrelid: pg_sys::Oid) -> Arc<Self> {
+    pub fn open(indexrelid: pg_sys::Oid) -> Self {
         unsafe {
             let indexrel = pg_sys::RelationIdGetRelation(indexrelid);
             let heaprelid = pg_sys::IndexGetRelation(indexrelid, false);
             let heaprel = pg_sys::RelationIdGetRelation(heaprelid);
-            Arc::new(Self {
+            Self {
                 indexrel: PgBox::from_pg(indexrel),
                 heaprel: PgBox::from_pg(heaprel),
                 cache: Default::default(),
-            })
+            }
         }
     }
 

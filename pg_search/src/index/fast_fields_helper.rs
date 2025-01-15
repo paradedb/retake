@@ -20,23 +20,19 @@
 use crate::index::reader::index::SearchIndexReader;
 use crate::postgres::types::TantivyValue;
 use crate::schema::SearchFieldType;
-use parking_lot::Mutex;
+use std::sync::OnceLock;
 use tantivy::columnar::StrColumn;
 use tantivy::fastfield::{Column, FastFieldReaders};
 use tantivy::schema::OwnedValue;
 use tantivy::{DocAddress, DocId};
 
-type FastFieldReadersCache = Vec<Vec<(FastFieldReaders, String, Mutex<Option<FFType>>)>>;
+type FastFieldReadersCache = Vec<Vec<(FastFieldReaders, String, OnceLock<FFType>)>>;
 /// A helper for tracking specific "fast field" readers from a [`SearchIndexReader`] reference
 ///
 /// They're organized by index positions and not names to eliminate as much runtime overhead as
 /// possible when looking up the value of a specific fast field.
 #[derive(Default)]
 pub struct FFHelper(FastFieldReadersCache);
-// TODO:  There's probably a smarter way to structure things so that we don't need to do
-//        interior mutability through a Mutex, but for expediency, this works and resolves
-//        the major perf issue we've been having with fast fields
-
 impl FFHelper {
     pub fn empty() -> Self {
         Self(vec![])
@@ -57,12 +53,12 @@ impl FFHelper {
                         | WhichFastField::Junk(_) => lookup.push((
                             fast_fields_reader.clone(),
                             String::from("junk"),
-                            Mutex::new(Some(FFType::Junk)),
+                            OnceLock::from(FFType::Junk),
                         )),
                         WhichFastField::Named(name, _) => lookup.push((
                             fast_fields_reader.clone(),
                             name.to_string(),
-                            Mutex::new(None),
+                            OnceLock::default(),
                         )),
                     }
                 }
@@ -78,8 +74,7 @@ impl FFHelper {
         Some(
             entry
                 .2
-                .lock()
-                .get_or_insert_with(|| FFType::new(&entry.0, &entry.1))
+                .get_or_init(|| FFType::new(&entry.0, &entry.1))
                 .value(doc_address.doc_id),
         )
     }
@@ -89,8 +84,7 @@ impl FFHelper {
         let entry = &self.0[doc_address.segment_ord as usize][field];
         entry
             .2
-            .lock()
-            .get_or_insert_with(|| FFType::new(&entry.0, &entry.1))
+            .get_or_init(|| FFType::new(&entry.0, &entry.1))
             .as_i64(doc_address.doc_id)
     }
 
@@ -99,8 +93,7 @@ impl FFHelper {
         let entry = &self.0[doc_address.segment_ord as usize][field];
         entry
             .2
-            .lock()
-            .get_or_insert_with(|| FFType::new(&entry.0, &entry.1))
+            .get_or_init(|| FFType::new(&entry.0, &entry.1))
             .string(doc_address.doc_id, value)
     }
 }

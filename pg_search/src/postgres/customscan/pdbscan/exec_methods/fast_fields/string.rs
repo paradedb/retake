@@ -125,8 +125,7 @@ impl ExecMethod for StringFastFieldExecState {
                         self.inner.blockvis.1 = is_block_all_visible(
                             self.inner.heaprel,
                             &mut self.inner.vmbuff,
-                            (*slot).tts_tid,
-                            (*slot).tts_tableOid,
+                            blockno,
                         );
                         self.inner.blockvis.1
                     };
