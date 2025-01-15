@@ -1,0 +1,170 @@
+---
+title: Open Telemetry
+---
+
+## Overview
+
+ParadeDB provides <a href="https://github.com/destrex271/postgresexporter">an unofficial OpenTelemetry (OTEL) exporter</a> that enables ingesting telemetry data into ParadeDB.
+
+Supported OpenTelemetry Data:
+
+- ✅ Logs
+- ✅ Traces
+- ❌ Metrics (in progress)
+
+## Integration Guide
+
+To integrate ParadeDB with your OpenTelemetry Collector, include the `postgresexporter` in your otel collector configuration file:
+
+```yaml
+exporters:
+  postgresexporter:
+    username: "myoteluser"
+    password: "myotelpassword"
+    database: "oteldata"
+    logs_table_name: "otellogs"
+    traces_table_name: "oteltraces"
+    port: 5432
+    host: "localhost"
+
+# -------------
+
+service:
+  # Add the postgresexporter as shown below in the service section of your collector config
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters:
+        - debug
+        - postgresexporter
+    traces:
+      receivers: [otlp]
+      exporters:
+        - debug
+        - postgresexporter
+```
+
+<ParamField body="username" required>
+  Username for the ParadeDB instance. Can be any string.
+</ParamField>
+
+<ParamField body="password" required>
+  Password for the ParadeDB instance. Can be any string.
+</ParamField>
+
+<ParamField body="database" required>
+  Name of the database instance. Can be any valid identifier for database name.
+</ParamField>
+
+<ParamField body="logs_table_name" required>
+  Name of the table where OpenTelemetry (OTel) logs will be stored. Can be any
+  valid identifier for table name.
+</ParamField>
+
+<ParamField body="traces_table_name" required>
+  Name of the table where OpenTelemetry (OTel) traces will be stored. Can be any
+  valid identifier for table name.
+</ParamField>
+
+<ParamField body="host" default="localhost" required>
+  TCP/IP address on which the server listens for connections from client
+  applications
+</ParamField>
+
+<ParamField body="port" default="5432" required>
+  The TCP port the server listens on.
+</ParamField>
+
+<b>Note:</b> Ensure the specified database (e.g., otel_data) exists before using
+the exporter.
+
+## Structure of Logs & Traces Table
+
+After exporting data to ParadeDB, the following table structures will be used for storage:
+
+<b>1. OTEL Logs Table</b>
+
+```
+    Column          |              Type              | Collation | Nullable |                 Default
+--------------------+--------------------------------+-----------+----------+------------------------------------------
+ Timestamp          | timestamp(6) without time zone |           | not null |
+ TimestampTime      | timestamp without time zone    |           | not null | generated always as ("Timestamp") stored
+ TraceId            | text                           |           |          |
+ SpanId             | text                           |           |          |
+ TraceFlags         | smallint                       |           |          |
+ SeverityText       | text                           |           |          |
+ SeverityNumber     | smallint                       |           |          |
+ ServiceName        | text                           |           | not null |
+ Body               | text                           |           |          |
+ ResourceSchemaUrl  | text                           |           |          |
+ ResourceAttributes | jsonb                          |           |          |
+ ScopeSchemaUrl     | text                           |           |          |
+ ScopeName          | text                           |           |          |
+ ScopeVersion       | text                           |           |          |
+ ScopeAttributes    | jsonb                          |           |          |
+ LogAttributes      | jsonb                          |           |          |
+Indexes:
+    "otellogs_pkey" PRIMARY KEY, btree ("ServiceName", "TimestampTime")
+```
+
+<b>2. OTEL Traces Table</b>
+
+```
+       Column       |              Type              | Collation | Nullable | Default
+--------------------+--------------------------------+-----------+----------+---------
+ Timestamp          | timestamp(6) without time zone |           | not null |
+ TraceId            | text                           |           |          |
+ SpanId             | text                           |           |          |
+ ParentSpanId       | text                           |           |          |
+ TraceState         | text                           |           |          |
+ SpanName           | text                           |           | not null |
+ SpanKind           | text                           |           |          |
+ ServiceName        | text                           |           | not null |
+ ResourceAttributes | jsonb                          |           |          |
+ ScopeName          | text                           |           |          |
+ ScopeVersion       | text                           |           |          |
+ SpanAttributes     | jsonb                          |           |          |
+ Duration           | bigint                         |           |          |
+ StatusCode         | text                           |           |          |
+ StatusMessage      | text                           |           |          |
+ Events             | jsonb                          |           |          |
+ Links              | jsonb                          |           |          |
+Indexes:
+    "oteltraces_pkey" PRIMARY KEY, btree ("ServiceName", "SpanName", "Timestamp")
+```
+
+## Examples
+
+```sql
+-- Creating BM25 index
+
+CREATE INDEX otellogs_search_idx ON otellogs
+USING bm25 (TimestampTime, ServiceName, SeverityText, Body)
+WITH (key_field='TimestampTime');
+```
+
+```
+-- Full text search for logs containing the keyword 'Processing'
+
+SELECT "TimestampTime", "ServiceName", "SeverityText", "Body"
+FROM otellogs
+WHERE "Body" @@@ 'processing'
+ORDER BY paradedb.score("TimestampTime") DESC
+LIMIT 10;
+```
+
+<Accordion title="Expected output">
+  ``` TimestampTime | ServiceName | SeverityText | Body
+  ----------------------------+--------------+--------------+---------------------------
+  2025-01-13 10:49:41.45282 | test-service | INFO | Processing batch 1
+  2025-01-13 10:49:41.453161 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:42.11059 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:43.105943 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:44.113809 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:45.777648 | test-service | INFO | Processing batch 2
+  2025-01-13 10:49:45.778265 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:46.680701 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:47.757439 | test-service | INFO | Starting order processing
+  2025-01-13 10:49:48.5583 | test-service | INFO | Processing batch 3 (10 rows)
+  ```
+</Accordion>
