@@ -17,7 +17,7 @@
 
 use super::utils::{list_managed_files, load_metas, save_new_metas, save_schema, save_settings};
 use crate::index::merge_policy::{
-    set_num_segments, AllowedMergePolicy, MergeLock, NPlusOneMergePolicy,
+    acquire_merge_lock, get_num_segments, set_num_segments, AllowedMergePolicy, NPlusOneMergePolicy,
 };
 use crate::index::reader::segment_component::SegmentComponentReader;
 use crate::postgres::storage::block::{
@@ -57,7 +57,6 @@ pub struct MVCCDirectory {
     relation_oid: pg_sys::Oid,
     mvcc_style: MvccSatisfies,
     merge_policy: AllowedMergePolicy,
-    merge_lock: Arc<Mutex<Option<MergeLock>>>,
 
     // keep a cache of readers behind an Arc<Mutex<_>> so that if/when this MVCCDirectory is
     // cloned, we don't lose all the work we did originally creating the FileHandler impls.  And
@@ -72,7 +71,6 @@ impl MVCCDirectory {
             merge_policy,
             mvcc_style: MvccSatisfies::Snapshot,
             readers: Arc::new(Mutex::new(FxHashMap::default())),
-            merge_lock: Default::default(),
         }
     }
 
@@ -82,7 +80,6 @@ impl MVCCDirectory {
             merge_policy,
             mvcc_style: MvccSatisfies::Any,
             readers: Arc::new(Mutex::new(FxHashMap::default())),
-            merge_lock: Default::default(),
         }
     }
 
@@ -262,7 +259,9 @@ impl Directory for MVCCDirectory {
             .collect::<FxHashSet<_>>()
             .len();
 
-        if matches!(self.merge_policy, AllowedMergePolicy::None) {
+        if matches!(self.merge_policy, AllowedMergePolicy::None)
+            || matches!(self.mvcc_style, MvccSatisfies::Any)
+        {
             return Some(Box::new(NoMergePolicy));
         }
 
@@ -276,23 +275,20 @@ impl Directory for MVCCDirectory {
         }
 
         // try to acquire merge lock and do merge
-        if let Some(mut merge_lock) = unsafe { MergeLock::acquire_for_merge(self.relation_oid) } {
-            if matches!(&self.merge_policy, &AllowedMergePolicy::NPlusOne) {
-                let num_segments = unsafe { merge_lock.num_segments() };
-                let parallelism = std::thread::available_parallelism()
-                    .expect("failed to get available_parallelism")
-                    .get();
-                let target_segments = std::cmp::max(parallelism, num_segments as usize);
-                let merge_policy: Box<dyn MergePolicy> = Box::new(NPlusOneMergePolicy {
-                    n: target_segments,
-                    min_num_segments: MIN_NUM_SEGMENTS,
-                });
+        if unsafe { acquire_merge_lock(self.relation_oid) }
+            && matches!(&self.merge_policy, &AllowedMergePolicy::NPlusOne)
+        {
+            let num_segments = unsafe { get_num_segments(self.relation_oid) };
+            let parallelism = std::thread::available_parallelism()
+                .expect("failed to get available_parallelism")
+                .get();
+            let target_segments = std::cmp::max(parallelism, num_segments as usize);
+            let merge_policy: Box<dyn MergePolicy> = Box::new(NPlusOneMergePolicy {
+                n: target_segments,
+                min_num_segments: MIN_NUM_SEGMENTS,
+            });
 
-                let mut lock = self.merge_lock.lock();
-                *lock = Some(merge_lock);
-
-                return Some(merge_policy);
-            }
+            return Some(merge_policy);
         }
 
         Some(Box::new(NoMergePolicy))
