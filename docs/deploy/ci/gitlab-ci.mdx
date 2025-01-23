@@ -8,10 +8,11 @@ ParadeDB can be added to a GitLab CI workflow as a [service container](https://d
 containers started in a workflow to provide necessary services (like databases) that a job depends on. These containers
 run alongside the job container and can be connected to over their service name.
 
-## Sample GitHub Actions Workflow
+## Sample GitLab CI Workflow
 
 ```yaml
 paradedb-in-gitlab-ci:
+  # The list of available tags can be found at https://hub.docker.com/r/paradedb/paradedb/tags
   image: paradedb/paradedb:latest
   services:
     - postgres
