@@ -62,13 +62,15 @@ jobs:
       - name: Build the ParadeDB Docker Image via Docker Compose (dev only)
         if: steps.env.outputs.environment == 'dev'
         working-directory: docker/
-        run: docker build --file Dockerfile --tag paradedb/paradedb:latest ..
+        run: docker compose -f docker-compose.dev.yml build
 
       # Sleep 10 seconds to give time for Postgres to start inside the container. The docker-compose.yml file
-      # will use the local ParadeDB image that we just built.
+      # will use the local ParadeDB image that we just built since we tagged it with `latest` in docker-compose.dev.yml.
+      #
+      # We add a --tmpfs mount as a test of compatibility with the upstream `postgres` image.
       - name: Start the ParadeDB Docker Image
         working-directory: docker/
-        run: docker compose -f docker-compose.yml up -d && sleep 10
+        run: docker compose -f docker-compose.yml up -d --tmpfs /tmp && sleep 10
 
       # We run the container in detached mode, and grep for the word ERROR to see if it failed to start correctly
       - name: Check for Errors in the ParadeDB Docker Image

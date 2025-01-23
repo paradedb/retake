@@ -1,0 +1,27 @@
+---
+title: GitLab CI
+---
+
+## Overview
+
+ParadeDB can be added to a GitLab CI workflow as a [service container](https://docs.gitlab.com/ee/ci/services/) in the job definition. Service containers are additional
+containers started in a workflow to provide necessary services (like databases) that a job depends on. These containers
+run alongside the job container and can be connected to over their service name.
+
+## Sample GitHub Actions Workflow
+
+```yaml
+paradedb-in-gitlab-ci:
+  image: paradedb/paradedb:latest
+  services:
+    - postgres
+  variables:
+    POSTGRES_USER: testuser
+    POSTGRES_DB: testdb
+    POSTGRES_HOST_AUTH_METHOD: trust
+  script:
+    - psql -h "postgres" -U testuser -d testdb -c "CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items');"
+    - psql -h "postgres" -U testuser -d testdb -c "SELECT description, rating, category FROM mock_items LIMIT 3;"
+    - psql -h "postgres" -U testuser -d testdb -c "CREATE INDEX search_idx ON mock_items USING bm25 (id, description, category, rating, in_stock, created_at, metadata, weight_range) WITH (key_field='id');"
+    - psql -h "postgres" -U testuser -d testdb -c "SELECT description, rating, category FROM mock_items WHERE description @@@ 'shoes' OR category @@@ 'footwear' AND rating @@@ '>2' ORDER BY description LIMIT 5;"
+```

@@ -1,0 +1,65 @@
+---
+title: GitHub Actions
+---
+
+## Overview
+
+ParadeDB can be added to a GitHub Actions workflow as a [service container](https://docs.github.com/en/actions/use-cases-and-examples/using-containerized-services/about-service-containers) in the job definition. Service containers are additional
+containers started in a workflow to provide necessary services (like databases) that a job depends on. These containers
+run alongside the job container or the runner (e.g., `ubuntu-latest`) and can be connected to on localhost.
+
+## Sample GitHub Actions Workflow
+
+```yaml
+name: ParadeDB in GitHub Actions
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+jobs:
+  paradedb-in-github-actions:
+    name: ParadeDB in GitHub Actions
+    runs-on: ubuntu-latest
+
+    # All
+    services:
+      paradedb:
+        image: paradedb/paradedb:latest
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in {1..10}; do
+            if psql -h localhost -U testuser -d testdb -c "SELECT 1;" > /dev/null 2>&1; then
+              echo "Database is ready!"
+              break
+            fi
+            echo "Waiting for database..."
+            sleep 5
+          done
+
+      - name: Run ParadeDB example queries
+        run: |
+          psql -h localhost -U testuser -d testdb -c "CALL paradedb.create_bm25_test_table(schema_name => 'public', table_name => 'mock_items');"
+          psql -h localhost -U testuser -d testdb -c "SELECT description, rating, category FROM mock_items LIMIT 3;"
+          psql -h localhost -U testuser -d testdb -c "CREATE INDEX search_idx ON mock_items USING bm25 (id, description, category, rating, in_stock, created_at, metadata, weight_range) WITH (key_field='id');"
+          psql -h localhost -U testuser -d testdb -c "SELECT description, rating, category FROM mock_items WHERE description @@@ 'shoes' OR category @@@ 'footwear' AND rating @@@ '>2' ORDER BY description LIMIT 5;"
+```
