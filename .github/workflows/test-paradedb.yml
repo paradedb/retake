@@ -69,9 +69,10 @@ jobs:
 
       # On PRs to `main`, we start the ParadeDB Docker image using `docker run` to test the
       # standalone Docker image. We add a --tmpfs mount as a test of compatibility with the
-      # upstream `postgres` image.
+      # upstream `postgres` image. The `docker run` command will use the local ParadeDB image
+      # that we just built since we tagged it with `latest` in docker-compose.dev.yml.
       - name: Start the ParadeDB Docker Image via Docker Run (prod only)
-        if: steps.env.outputs.environment == 'dev'
+        if: steps.env.outputs.environment == 'prod'
         working-directory: docker/
         run: |
           docker run -d \
