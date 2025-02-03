@@ -111,11 +111,11 @@ run_single_benchmark() {
   echo "===== pg_stat_statements (Top 5 by total_time) for ${label}-${basefile} =====" >> "$SUMMARY_FILE"
   psql "$DB_URL" -c "
     SELECT query,
-           calls,
-           ROUND(total_time::numeric, 2) AS total_time,
-           rows
+         calls,
+         to_char(total_plan_time + total_exec_time, 'FM999999999.00') AS total_time,
+         rows
     FROM pg_stat_statements
-    ORDER BY total_time DESC
+    ORDER BY (total_plan_time + total_exec_time) DESC
     LIMIT 5;
   " >> "$SUMMARY_FILE"
   echo "" >> "$SUMMARY_FILE"
