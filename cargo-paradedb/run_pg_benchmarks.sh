@@ -7,6 +7,7 @@
 #   - Collects additional DB metrics (pg_stat_statements, DB size).
 #   - Collects system resource usage with iostat in a cross-platform way.
 #   - Stores per-transaction logs in a subdirectory via --log-prefix.
+#   - Benchmarks index creation using detailed resource metrics.
 #
 
 ###############################################################################
@@ -121,6 +122,62 @@ run_single_benchmark() {
   echo "" >> "$SUMMARY_FILE"
 }
 
+benchmark_index_creation() {
+  echo "----- Benchmarking Index Creation -----" >> "$SUMMARY_FILE"
+  
+  # Drop the index if it exists.
+  echo "Dropping existing index idx_benchmark_eslogs_bm25 (if any)..." >> "$SUMMARY_FILE"
+  psql "$DB_URL" -c "DROP INDEX IF EXISTS idx_benchmark_eslogs_bm25;" >/dev/null 2>&1
+
+  # Start a system monitor using dstat to capture CPU, disk, network, etc.
+  echo "Starting dstat to monitor resource usage during index creation..."
+  dstat -tcnd --output "$LOG_DIR/dstat_index_creation.csv" 1 > /dev/null 2>&1 &
+  local DSTAT_PID=$!
+
+  # Run the CREATE INDEX command wrapped with GNU time to capture detailed resource metrics.
+  echo "Creating index idx_benchmark_eslogs_bm25 and collecting resource metrics..." >> "$SUMMARY_FILE"
+  local TIME_OUTPUT
+  TIME_OUTPUT=$( { /usr/bin/time -v psql "$DB_URL" -c "CREATE INDEX idx_benchmark_eslogs_bm25
+    ON public.benchmark_eslogs
+    USING bm25 (
+      id,
+      process,
+      cloud,
+      aws_cloudwatch,
+      agent,
+      \"timestamp\",
+      message,
+      metrics_size,
+      log_file_path
+    )
+    WITH (
+      key_field = 'id',
+      text_fields='{
+        \"message\":        {},
+        \"log_file_path\":  {}
+      }',
+      numeric_fields='{
+        \"metrics_size\":   {}
+      }',
+      datetime_fields='{
+        \"timestamp\":      {}
+      }',
+      json_fields='{
+      	\"process\":        {},
+      	\"cloud\":          {},
+        \"aws_cloudwatch\": {},
+        \"agent\":          {}
+      }'
+    );" ; } 2>&1 )
+  echo "$TIME_OUTPUT" >> "$SUMMARY_FILE"
+
+  # Stop the dstat monitor.
+  echo "Stopping dstat (PID=$DSTAT_PID)..." >> "$SUMMARY_FILE"
+  kill $DSTAT_PID 2>/dev/null
+
+  echo "----- Index Creation Benchmark Complete -----" >> "$SUMMARY_FILE"
+}
+
 ###############################################################################
 #                          MAIN SCRIPT LOGIC                                  #
 ###############################################################################
@@ -176,23 +233,27 @@ for sql_file in "$FOLDER_PG_SEARCH"/*.sql; do
   run_single_benchmark "$sql_file" "pgsearch"
 done
 
-# 7. Stop system stats
+# 7. Stop system stats (iostat)
 echo "Killing system stat process (PID=$SYSSTAT_PID)..."
 kill $SYSSTAT_PID 2>/dev/null
 
-# 8. Collect DB size after
+# 8. Benchmark index creation with resource metrics
+benchmark_index_creation
+
+# 9. Collect DB size after
 echo "===== Database size AFTER the tests ====="        >> "$SUMMARY_FILE"
 psql "$DB_URL" -c "
   SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size_after;
 " >> "$SUMMARY_FILE"
 
-# 9. Summarize final results
+# 10. Summarize final results
 echo ""                                                >> "$SUMMARY_FILE"
 echo "======================================================================" >> "$SUMMARY_FILE"
 echo "All tests completed at: $(date)"                                    >> "$SUMMARY_FILE"
 echo "Logs are in: $LOG_DIR"                                             >> "$SUMMARY_FILE"
 echo "System-level stats are in: $SYSSTAT_LOG"                           >> "$SUMMARY_FILE"
 echo "Per-transaction logs are in: $PG_BENCH_LOG_SUBDIR"                 >> "$SUMMARY_FILE"
+echo "dstat output for index creation is in: $LOG_DIR/dstat_index_creation.csv" >> "$SUMMARY_FILE"
 echo "======================================================================" >> "$SUMMARY_FILE"
 
 echo "========================= DONE ========================="
