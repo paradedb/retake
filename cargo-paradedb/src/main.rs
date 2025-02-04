@@ -110,7 +110,7 @@ fn main() -> Result<()> {
                         db_url,
                         sql_folder,
                         clients: 4,
-                        transactions: 10,
+                        transactions: 100,
                         pgbench_extra_args: vec![
                             "--log".to_string(),
                             "--report-per-command".to_string(),
