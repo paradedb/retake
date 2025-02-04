@@ -17,13 +17,17 @@
 
 mod bench_hits;
 mod benchmark;
+mod ci_benchmark;
 mod cli;
 mod elastic;
 mod subcommand;
 mod tables;
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 use async_std::task::block_on;
+use ci_benchmark::BenchmarkSuite;
 use cli::{Cli, Corpus, EsLogsCommand, HitsCommand, Subcommand};
 use dotenvy::dotenv;
 use tracing_subscriber::EnvFilter;
@@ -93,6 +97,34 @@ fn main() -> Result<()> {
                     field,
                     term,
                 )),
+                EsLogsCommand::RunCiSuite {
+                    sql,
+                    url,
+                    report,
+                    skip_index,
+                } => {
+                    let db_url = url;
+                    let sql_folder = PathBuf::from(sql.clone());
+
+                    let config = ci_benchmark::BenchmarkSuiteConfig {
+                        db_url,
+                        sql_folder,
+                        clients: 4,
+                        transactions: 10,
+                        pgbench_extra_args: vec![
+                            "--log".to_string(),
+                            "--report-per-command".to_string(),
+                        ],
+                        skip_index,
+                        maintenance_work_mem: "16GB".into(),
+                        report_table: report,
+                    };
+
+                    let mut suite = block_on(BenchmarkSuite::new(config))?;
+                    block_on(suite.run_all_benchmarks())?;
+
+                    Ok(())
+                }
             },
             Corpus::Hits(hits) => match hits.command {
                 HitsCommand::Run {

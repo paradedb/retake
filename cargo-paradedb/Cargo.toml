@@ -26,6 +26,7 @@ sqlx = { version = "0.7.4", features = [
   "chrono",
   "tls-native-tls",
 ] }
+sysinfo = { version = "0.33.1", features = ["disk"] }
 tempfile = "3.12.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

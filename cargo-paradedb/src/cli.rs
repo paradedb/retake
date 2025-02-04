@@ -174,6 +174,16 @@ pub enum EsLogsCommand {
         #[arg(short, long)]
         elastic_url: String,
     },
+    RunCiSuite {
+        #[arg(short, long)]
+        sql: String,
+        #[arg(short, long, env = "DATABASE_URL")]
+        url: String,
+        #[clap(long)]
+        report: String,
+        #[clap(long)]
+        skip_index: bool,
+    },
 }
 /// The command to run on the hits corpus.
 #[derive(Debug, clap::Subcommand)]

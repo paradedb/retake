@@ -638,6 +638,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "sysinfo 0.33.1",
  "tempfile",
  "tracing",
  "tracing-subscriber",
