@@ -754,8 +754,9 @@ impl BenchmarkSuite {
                 let path = entry.path();
                 let fname = path.file_name().unwrap_or_default().to_string_lossy();
 
-                // We only parse files named "pgbench_log.*"
-                if !fname.starts_with("pgbench_log.") {
+                // We only parse files whose names start with "pgbench_log"
+                dbg!(fname);
+                if !fname.starts_with("pgbench_log") {
                     continue;
                 }
                 if let Ok(content) = fs::read_to_string(&path) {
@@ -973,6 +974,7 @@ impl BenchmarkSuite {
         // parse the combined logs for this run
         let (transaction_log, aggregated_intervals) =
             Self::parse_combined_logs_in_dir(scratch_path);
+        dbg!(&transaction_log);
         dbg!(&intervals, &transaction_log, &aggregated_intervals);
 
         // glean tps / lat from stdout
