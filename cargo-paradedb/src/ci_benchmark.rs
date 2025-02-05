@@ -77,14 +77,14 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-/// Encapsulates min, max, mean, stddev, and p99 from a set of latencies.
+/// Encapsulates min, max, mean, stddev, and p99 from a set of latencies in microseconds.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LatencyStats {
-    pub min_ms: f64,
-    pub max_ms: f64,
-    pub mean_ms: f64,
-    pub stddev_ms: f64,
-    pub p99_ms: f64,
+    pub min_us: f64,
+    pub max_us: f64,
+    pub mean_us: f64,
+    pub stddev_us: f64,
+    pub p99_us: f64,
 }
 
 /// A helper to compute LatencyStats from a slice of latency measurements (in ms).
@@ -119,11 +119,11 @@ fn compute_latency_stats(latencies_ms: &[f64]) -> Option<LatencyStats> {
     let p99_val = sorted_vals[std::cmp::min(p99_index, len - 1)];
 
     Some(LatencyStats {
-        min_ms: min_val.round(),
-        max_ms: max_val.round(),
-        mean_ms: mean.round(),
-        stddev_ms: stddev.round(),
-        p99_ms: p99_val.round(),
+        min_us: min_val.round(),
+        max_us: max_val.round(),
+        mean_us: mean.round(),
+        stddev_us: stddev.round(),
+        p99_us: p99_val.round(),
     })
 }
 
@@ -1038,11 +1038,11 @@ cargo-paradedb/src/ci_benchmark.rs
                     .max()
                     .unwrap_or(0) as f64;
                 let stats = Some(LatencyStats {
-                    min_ms: min,
-                    max_ms: max,
-                    mean_ms: mean,
-                    stddev_ms: stddev,
-                    p99_ms: max,
+                    min_us: min,
+                    max_us: max,
+                    mean_us: mean,
+                    stddev_us: stddev,
+                    p99_us: max,
                 });
         dbg!(&latencies, "from transaction_log");
 
@@ -1074,11 +1074,11 @@ cargo-paradedb/src/ci_benchmark.rs
                     .unwrap_or(0) as f64;
                 // Since we don't have the exact p99 from aggregated intervals, we set it equal to max.
                 let stats = Some(LatencyStats {
-                    min_ms: min,
-                    max_ms: max,
-                    mean_ms: mean,
-                    stddev_ms: stddev,
-                    p99_ms: max,
+                    min_us: min,
+                    max_us: max,
+                    mean_us: mean,
+                    stddev_us: stddev,
+                    p99_us: max,
                 });
                 dbg!(&stats, "computed from aggregated_intervals");
                 stats
