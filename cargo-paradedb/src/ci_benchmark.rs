@@ -755,7 +755,7 @@ impl BenchmarkSuite {
                 let fname = path.file_name().unwrap_or_default().to_string_lossy();
 
                 // We only parse files whose names start with "pgbench_log"
-                dbg!(fname);
+                dbg!(&fname);
                 if !fname.starts_with("pgbench_log") {
                     continue;
                 }
