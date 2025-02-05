@@ -240,6 +240,7 @@ pub struct PgBenchTestResult {
 
     /// For each unique statement name, aggregated min/mean/stddev/p99 (in microseconds).
     pub statement_latency_details: Vec<StatementLatencyStatsUs>,
+    pub items_matched: Option<i64>,
 }
 
 /// A row from pg_stat_statements (if available).
@@ -695,6 +696,22 @@ impl BenchmarkSuite {
         Ok(out)
     }
 
+    fn fetch_total_items_matched_sync(&mut self) -> Result<Option<i64>> {
+        if !self.pg_stat_statements_available() {
+            return Ok(None);
+        }
+        let conn = self.conn_mut()?;
+        let row = block_on(async {
+            sqlx::query(
+                "SELECT COALESCE(SUM(rows), 0)::BIGINT AS matched_items FROM pg_stat_statements;",
+            )
+            .fetch_one(conn)
+            .await
+        })?;
+        let sum: i64 = row.get("matched_items");
+        Ok(Some(sum))
+    }
+
     /// Identify lines like "progress: 1.0 s, 101.0 tps, lat 12.3 ms" in stdout.
     fn parse_aggregate_intervals(stdout: &str) -> Vec<PgBenchLogInterval> {
         let mut intervals = Vec::new();
@@ -1007,6 +1024,7 @@ impl BenchmarkSuite {
         let statement_latency_details =
             Self::group_and_compute_per_statement_stats_us(&transaction_log);
 
+        let items_matched = self.fetch_total_items_matched_sync().unwrap_or(None);
         Ok(PgBenchTestResult {
             test_name: test_name.to_string(),
             sql_file: base_name,
@@ -1027,6 +1045,7 @@ impl BenchmarkSuite {
             aggregated_intervals,
             computed_latency_stats,
             statement_latency_details,
+            items_matched,
         })
     }
 
