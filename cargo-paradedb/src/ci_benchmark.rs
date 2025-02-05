@@ -1026,18 +1026,33 @@ impl BenchmarkSuite {
             stats
         } else {
             dbg!("transaction_log empty, falling back to aggregated_intervals");
-            // Compute approximate latency stats from aggregated_intervals.
-            // Here we simply compute a weighted average over all intervals.
             let total_transactions: i64 = aggregated_intervals.iter().map(|a| a.num_transactions).sum();
             if total_transactions > 0 {
+                // Sum all latencies and squares from aggregated intervals.
                 let total_latency: i64 = aggregated_intervals.iter().map(|a| a.sum_latency).sum();
+                let total_latency_sq: i64 = aggregated_intervals.iter().map(|a| a.sum_latency_2).sum();
+
                 let mean = total_latency as f64 / total_transactions as f64;
+                let variance = total_latency_sq as f64 / total_transactions as f64 - mean * mean;
+                let stddev = variance.sqrt();
+
+                let min = aggregated_intervals
+                    .iter()
+                    .map(|a| a.min_latency)
+                    .min()
+                    .unwrap_or(0) as f64;
+                let max = aggregated_intervals
+                    .iter()
+                    .map(|a| a.max_latency)
+                    .max()
+                    .unwrap_or(0) as f64;
+                // Since we don't have the exact p99 from aggregated intervals, we set it equal to max.
                 let stats = Some(LatencyStats {
-                    min_ms: mean,
-                    max_ms: mean,
+                    min_ms: min,
+                    max_ms: max,
                     mean_ms: mean,
-                    stddev_ms: 0.0,
-                    p99_ms: mean,
+                    stddev_ms: stddev,
+                    p99_ms: max,
                 });
                 dbg!(&stats, "computed from aggregated_intervals");
                 stats
