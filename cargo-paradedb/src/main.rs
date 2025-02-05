@@ -109,7 +109,7 @@ fn main() -> Result<()> {
                     let config = ci_benchmark::BenchmarkSuiteConfig {
                         db_url,
                         sql_folder,
-                        clients: 4,
+                        clients: 1,
                         transactions: 100,
                         pgbench_extra_args: vec![
                             "--log".to_string(),

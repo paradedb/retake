@@ -315,17 +315,6 @@ pub struct BenchmarkSuite {
 impl BenchmarkSuite {
     /// Construct the suite and verify connectivity, versions, etc.
     pub async fn new(config: BenchmarkSuiteConfig) -> Result<Self> {
-        // Force single-client concurrency if not already 1:
-        if config.clients != 1 {
-            println!(
-                "Note: Overriding concurrency to 1 (only single-client allowed). \
-                 Original requested clients = {}",
-                config.clients
-            );
-        }
-        let mut config = config;
-        config.clients = 1;
-
         let conn_opts = PgConnectOptions::from_str(&config.db_url).context("Invalid DB URL")?;
         let mut conn = PgConnection::connect_with(&conn_opts)
             .await
