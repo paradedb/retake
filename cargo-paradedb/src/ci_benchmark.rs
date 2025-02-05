@@ -1018,7 +1018,34 @@ impl BenchmarkSuite {
             .iter()
             .map(|t| t.latency_secs * 1000.0)
             .collect();
-        let computed_latency_stats = compute_latency_stats(&latencies);
+        dbg!(&latencies, "from transaction_log");
+
+        let computed_latency_stats = if !latencies.is_empty() {
+            let stats = compute_latency_stats(&latencies);
+            dbg!(&stats, "computed from transaction_log");
+            stats
+        } else {
+            dbg!("transaction_log empty, falling back to aggregated_intervals");
+            // Compute approximate latency stats from aggregated_intervals.
+            // Here we simply compute a weighted average over all intervals.
+            let total_transactions: i64 = aggregated_intervals.iter().map(|a| a.num_transactions).sum();
+            if total_transactions > 0 {
+                let total_latency: i64 = aggregated_intervals.iter().map(|a| a.sum_latency).sum();
+                let mean = total_latency as f64 / total_transactions as f64;
+                let stats = Some(LatencyStats {
+                    min_ms: mean,
+                    max_ms: mean,
+                    mean_ms: mean,
+                    stddev_ms: 0.0,
+                    p99_ms: mean,
+                });
+                dbg!(&stats, "computed from aggregated_intervals");
+                stats
+            } else {
+                dbg!("No transactions or aggregated intervals found");
+                None
+            }
+        };
 
         // Now compute per‐statement latencies
         let statement_latency_details =
