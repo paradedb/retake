@@ -153,14 +153,15 @@ pub struct BenchmarkSuiteConfig {
 
     /// The table in which to store our final JSON report
     pub report_table: String,
-
-    /// Git hash associated with the current code, for traceability
-    pub git_hash: Option<String>,
 }
 
 /// The top-level JSON report structure.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BenchmarkReport {
+    pub extension_version: Option<String>,
+    pub extension_sha: Option<String>,
+    pub extension_build_mode: Option<String>,
+
     pub suite_started_at: DateTime<Utc>,
     pub suite_finished_at: Option<DateTime<Utc>>,
 
@@ -309,17 +310,6 @@ impl BenchmarkSuite {
             config.clients = 1;
         }
 
-        // Force prepared statements unless user already requested it
-        if !config
-            .pgbench_extra_args
-            .iter()
-            .any(|arg| arg.contains("--protocol="))
-        {
-            config
-                .pgbench_extra_args
-                .push("--protocol=prepared".to_string());
-        }
-
         let conn_opts = PgConnectOptions::from_str(&config.db_url).context("Invalid DB URL")?;
         let mut conn = PgConnection::connect_with(&conn_opts)
             .await
@@ -384,8 +374,14 @@ impl BenchmarkSuite {
             .await
             .unwrap_or(("Connection Failed".into(),));
 
+        let (extension_version, extension_sha, extension_build_mode) =
+            Self::fetch_version_info(&mut conn).await?;
+
         // Initialize the top-level report:
         let report = BenchmarkReport {
+            extension_version,
+            extension_sha,
+            extension_build_mode,
             suite_started_at: Utc::now(),
             suite_finished_at: None,
             config: config.clone(),
@@ -488,7 +484,18 @@ impl BenchmarkSuite {
         Ok(sz)
     }
 
+    async fn fetch_version_info(
+        conn: &mut PgConnection,
+    ) -> Result<(Option<String>, Option<String>, Option<String>)> {
+        let info: (Option<String>, Option<String>, Option<String>) =
+            sqlx::query_as("SELECT version, githash, build_mode FROM paradedb.version_info();")
+                .fetch_one(conn)
+                .await
+                .unwrap_or_default();
+        Ok(info)
+    }
     /// Attempt to retrieve a current_setting(...) from Postgres.
+
     async fn get_current_setting(&mut self, key: &str) -> Result<Option<String>> {
         let sql = format!("SELECT current_setting('{key}') AS val;");
         let result = sqlx::query_as::<_, (String,)>(&sql)
@@ -819,6 +826,18 @@ impl BenchmarkSuite {
         })
     }
 
+    fn transform_sql_to_prepared(user_sql: &str, mem_val: &str) -> String {
+        // If user_sql contains multiple statements, that might cause an error.
+        // But for single-statement queries, it works well.
+
+        format!(
+            "\
+            SET maintenance_work_mem = '{mem_val}';\n\
+            PREPARE my_statement AS\n{user_sql}\n;\n\
+            EXECUTE my_statement;\n"
+        )
+    }
+
     /// Run pgbench for a single `.sql` test file, parse results, compute stats, etc.
     async fn run_single_sql_pgbench(
         &mut self,
@@ -997,7 +1016,7 @@ impl BenchmarkSuite {
         self.insert_report().await?;
         println!(
             "All benchmarks complete; final JSON inserted into table \"{}\".\nGit hash: {:?}",
-            self.config.report_table, self.config.git_hash
+            self.config.report_table, self.report.extension_sha
         );
         Ok(())
     }
