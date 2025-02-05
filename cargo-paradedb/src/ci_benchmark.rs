@@ -119,11 +119,11 @@ fn compute_latency_stats(latencies_ms: &[f64]) -> Option<LatencyStats> {
     let p99_val = sorted_vals[std::cmp::min(p99_index, len - 1)];
 
     Some(LatencyStats {
-        min_ms: min_val,
-        max_ms: max_val,
-        mean_ms: mean,
-        stddev_ms: stddev,
-        p99_ms: p99_val,
+        min_ms: min_val.round(),
+        max_ms: max_val.round(),
+        mean_ms: mean.round(),
+        stddev_ms: stddev.round(),
+        p99_ms: p99_val.round(),
     })
 }
 
