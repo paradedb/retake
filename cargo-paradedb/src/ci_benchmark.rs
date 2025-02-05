@@ -1016,8 +1016,34 @@ impl BenchmarkSuite {
         // compute overall transaction-level stats
         let latencies: Vec<f64> = transaction_log
             .iter()
-            .map(|t| t.latency_secs * 1000.0)
+            .map(|t| t.latency_secs * 1_000_000.0)
             .collect();
+```
+
+cargo-paradedb/src/ci_benchmark.rs
+```rust
+<<<<<<< SEARCH
+                let mean = total_latency as f64 / total_transactions as f64;
+                let variance = total_latency_sq as f64 / total_transactions as f64 - mean * mean;
+                let stddev = variance.sqrt();
+
+                let min = aggregated_intervals
+                    .iter()
+                    .map(|a| a.min_latency)
+                    .min()
+                    .unwrap_or(0) as f64;
+                let max = aggregated_intervals
+                    .iter()
+                    .map(|a| a.max_latency)
+                    .max()
+                    .unwrap_or(0) as f64;
+                let stats = Some(LatencyStats {
+                    min_ms: min,
+                    max_ms: max,
+                    mean_ms: mean,
+                    stddev_ms: stddev,
+                    p99_ms: max,
+                });
         dbg!(&latencies, "from transaction_log");
 
         let computed_latency_stats = if !latencies.is_empty() {
