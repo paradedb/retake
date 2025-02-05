@@ -384,6 +384,13 @@ impl BenchmarkSuite {
         let (extension_version, extension_sha, extension_build_mode) =
             Self::fetch_version_info(&mut conn).await?;
 
+        // Warn once if we have no git hash
+        if extension_sha.is_none() {
+            eprintln!(
+                "WARNING: no extension_sha found. Will store empty string in git_hash column."
+            );
+        }
+
         // Initialize the top-level report
         let report = BenchmarkReport {
             extension_version,
@@ -1098,12 +1105,17 @@ impl BenchmarkSuite {
 
     async fn insert_report(&mut self) -> Result<()> {
         let json_val = serde_json::to_value(&self.report)?;
+        // Use empty string if extension_sha is None
+        let git_hash = self.report.extension_sha.clone().unwrap_or_else(|| "".into());
+
+        // Insert into your new git_hash text column
         let insert_sql = format!(
-            "INSERT INTO {} (report_data) VALUES ($1::jsonb)",
+            "INSERT INTO {} (report_data, git_hash) VALUES ($1::jsonb, $2::text)",
             self.config.report_table
         );
         sqlx::query(&insert_sql)
             .bind(json_val)
+            .bind(git_hash)
             .execute(self.conn_mut()?)
             .await?;
         Ok(())
