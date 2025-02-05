@@ -410,6 +410,8 @@ impl BenchmarkSuite {
             pgbench_tests: vec![],
         };
 
+        dbg!(&report);
+
         Ok(Self {
             config,
             connection: Some(conn),
@@ -651,6 +653,9 @@ impl BenchmarkSuite {
             .fetch_paradedb_index_info("idx_benchmark_eslogs_bm25")
             .await
             .ok();
+
+        dbg!(creation_start.elapsed(), &samples);
+        dbg!(&index_settings, &index_size, &index_info);
 
         Ok(IndexCreationBenchmarkResult {
             started_at: now_utc,
@@ -960,6 +965,7 @@ impl BenchmarkSuite {
             );
         }
         let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+        dbg!(&stdout_str);
 
         // parse intervals from stdout
         let intervals = Self::parse_aggregate_intervals(&stdout_str);
@@ -967,6 +973,7 @@ impl BenchmarkSuite {
         // parse the combined logs for this run
         let (transaction_log, aggregated_intervals) =
             Self::parse_combined_logs_in_dir(scratch_path);
+        dbg!(&intervals, &transaction_log, &aggregated_intervals);
 
         // glean tps / lat from stdout
         let mut tps = None;
@@ -1081,6 +1088,7 @@ impl BenchmarkSuite {
 
     async fn insert_report(&mut self) -> Result<()> {
         let val = serde_json::to_value(&self.report)?;
+        dbg!(&val);
         let insert_sql = format!(
             "INSERT INTO {} (report_data) VALUES ($1::jsonb)",
             self.config.report_table
