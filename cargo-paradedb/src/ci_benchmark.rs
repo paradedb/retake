@@ -241,6 +241,7 @@ pub struct PgBenchTestResult {
     /// For each unique statement name, aggregated min/mean/stddev/p99 (in microseconds).
     pub statement_latency_details: Vec<StatementLatencyStatsUs>,
     pub items_matched: Option<i64>,
+    pub full_sql: String,
 }
 
 /// A row from pg_stat_statements (if available).
@@ -1046,6 +1047,7 @@ impl BenchmarkSuite {
             computed_latency_stats,
             statement_latency_details,
             items_matched,
+            full_sql: sql_content,
         })
     }
 
