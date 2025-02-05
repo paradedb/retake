@@ -760,19 +760,8 @@ impl BenchmarkSuite {
                 if let Ok(content) = fs::read_to_string(&path) {
                     for line in content.lines() {
                         let parts: Vec<_> = line.split_whitespace().collect();
-                        // 15-column lines => aggregated intervals
-                        if parts.len() == 15 {
-                            if let Ok(row) = Self::parse_15_column_aggregated_line(&parts) {
-                                agg_rows.push(row);
-                            }
-                        } else {
-                            // maybe it's a CSV line with 6 columns => per-transaction
-                            let csv_parts: Vec<_> = line.split(',').collect();
-                            if csv_parts.len() == 6 {
-                                if let Ok(tr) = Self::parse_6_column_transaction_line(&csv_parts) {
-                                    tx_logs.push(tr);
-                                }
-                            }
+                        if let Ok(row) = Self::parse_15_column_aggregated_line(&parts) {
+                            agg_rows.push(row);
                         }
                     }
                 }
