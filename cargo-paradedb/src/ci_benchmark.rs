@@ -87,7 +87,7 @@ pub struct LatencyStats {
     pub p99_ms: f64,
 }
 
-/// A helper to compute LatencyStats from a set of latency measurements (in ms).
+/// A helper to compute LatencyStats from a slice of latency measurements (in ms).
 fn compute_latency_stats(latencies_ms: &[f64]) -> Option<LatencyStats> {
     if latencies_ms.is_empty() {
         return None;
@@ -115,7 +115,7 @@ fn compute_latency_stats(latencies_ms: &[f64]) -> Option<LatencyStats> {
     // p99
     let mut sorted_vals = latencies_ms.to_vec();
     sorted_vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let p99_index = ((len as f64) * 0.99).ceil() as usize - 1; // zero-based
+    let p99_index = ((len as f64) * 0.99).ceil() as usize - 1;
     let p99_val = sorted_vals[std::cmp::min(p99_index, len - 1)];
 
     Some(LatencyStats {
@@ -136,7 +136,7 @@ pub struct BenchmarkSuiteConfig {
     /// Folder containing the `.sql` files to test
     pub sql_folder: PathBuf,
 
-    /// Number of parallel clients (set to 1 for serial testing, as requested)
+    /// Number of parallel clients (set to 1 for serial testing)
     pub clients: u32,
 
     /// Number of times each query is run
@@ -236,8 +236,11 @@ pub struct PgBenchTestResult {
     /// The aggregated log intervals from `--aggregate-interval=1`
     pub aggregated_intervals: Vec<PgBenchAggregateIntervalRow>,
 
-    /// Computed stats from per-transaction log
+    /// Computed stats from per-transaction log (for the entire transaction)
     pub computed_latency_stats: Option<LatencyStats>,
+
+    /// For each unique statement name, aggregated min/mean/stddev/p99.
+    pub statement_latency_details: Vec<StatementLatencyStats>,
 }
 
 /// A row from pg_stat_statements (if available).
@@ -249,7 +252,7 @@ pub struct TopStatement {
     pub rows: i64,
 }
 
-/// A "progress:" line parse from stdout.
+/// A "progress:" line parse from stdout (optional, if you want to parse).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PgBenchLogInterval {
     pub time_sec: f64,
@@ -258,7 +261,7 @@ pub struct PgBenchLogInterval {
     pub tps_in_interval: f64,
 }
 
-/// A 6-column line from the `-l` logs (per transaction).
+/// A 6-or-7-column line from the `-l` logs (per transaction).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PgBenchTransactionLog {
     pub client_id: u32,
@@ -288,6 +291,14 @@ pub struct PgBenchAggregateIntervalRow {
     pub deadlock_failures: i64,
 }
 
+/// Aggregated latency info for a single statement name (e.g. "SELECT * FROM foo").
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatementLatencyStats {
+    pub stmt_name: String,
+    pub calls: usize,
+    pub latency: LatencyStats,
+}
+
 /// Primary orchestrator for the benchmark workflow.
 pub struct BenchmarkSuite {
     config: BenchmarkSuiteConfig,
@@ -299,16 +310,15 @@ impl BenchmarkSuite {
     /// Construct the suite and verify connectivity, versions, etc.
     pub async fn new(config: BenchmarkSuiteConfig) -> Result<Self> {
         // Force single-client concurrency if not already 1:
-        // (We want pure per-query timings in serial, not concurrency.)
-        let mut config = config;
         if config.clients != 1 {
             println!(
-                "Note: Overriding concurrency to 1 (feedback: run queries in isolation). \
+                "Note: Overriding concurrency to 1 (only single-client allowed). \
                  Original requested clients = {}",
                 config.clients
             );
-            config.clients = 1;
         }
+        let mut config = config;
+        config.clients = 1;
 
         let conn_opts = PgConnectOptions::from_str(&config.db_url).context("Invalid DB URL")?;
         let mut conn = PgConnection::connect_with(&conn_opts)
@@ -321,10 +331,10 @@ impl BenchmarkSuite {
         // Check if pg_stat_statements is available.
         let stat_avail: bool = sqlx::query_scalar(
             r#"
-              SELECT EXISTS(
-                SELECT 1 FROM pg_available_extensions
-                WHERE name='pg_stat_statements'
-              );
+            SELECT EXISTS(
+              SELECT 1 FROM pg_available_extensions
+              WHERE name='pg_stat_statements'
+            );
             "#,
         )
         .fetch_one(&mut conn)
@@ -338,13 +348,13 @@ impl BenchmarkSuite {
                 .await;
         }
 
-        // Compute memory limit for maintenance_work_mem.
+        // Retrieve total memory from sys.
         let mut sys = System::new_all();
         sys.refresh_memory();
         let total_bytes = sys.total_memory() * 1024;
         let allowed_max = (total_bytes as f64 * 0.8) as u64;
 
-        // Convert the user-supplied memory string into bytes, clamp it if needed.
+        // Convert the user-supplied memory string
         let requested = parse_memory_str(&config.maintenance_work_mem).ok_or_else(|| {
             anyhow!(
                 "Cannot parse maintenance_work_mem: {}",
@@ -362,7 +372,7 @@ impl BenchmarkSuite {
         let set_stmt = format!("SET maintenance_work_mem = '{}';", effective_str);
         sqlx::query(&set_stmt).execute(&mut conn).await?;
 
-        // Verify the final setting:
+        // Validate final setting:
         let (validated,): (String,) = sqlx::query_as("SHOW maintenance_work_mem;")
             .fetch_one(&mut conn)
             .await
@@ -374,10 +384,11 @@ impl BenchmarkSuite {
             .await
             .unwrap_or(("Connection Failed".into(),));
 
+        // extension version info
         let (extension_version, extension_sha, extension_build_mode) =
             Self::fetch_version_info(&mut conn).await?;
 
-        // Initialize the top-level report:
+        // Initialize the top-level report
         let report = BenchmarkReport {
             extension_version,
             extension_sha,
@@ -451,19 +462,16 @@ impl BenchmarkSuite {
         Ok(())
     }
 
-    /// Return a mutable reference to our live PgConnection.
     fn conn_mut(&mut self) -> Result<&mut PgConnection> {
         self.connection
             .as_mut()
             .ok_or_else(|| anyhow!("No active DB connection available"))
     }
 
-    /// True if pg_stat_statements is available for capturing top statements.
     fn pg_stat_statements_available(&self) -> bool {
         self.report.pg_stat_statements_available
     }
 
-    /// Reset pg_stat_statements (if available).
     async fn reset_pg_stat_statements(&mut self) -> Result<()> {
         if self.pg_stat_statements_available() {
             sqlx::query("SELECT pg_stat_statements_reset()")
@@ -473,14 +481,12 @@ impl BenchmarkSuite {
         Ok(())
     }
 
-    /// Fetch a user-friendly DB size string, e.g. "135 MB".
     async fn fetch_db_size(&mut self) -> Result<String> {
-        let (sz,): (String,) = sqlx::query_as(
-            "SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size",
-        )
-        .fetch_one(self.conn_mut()?)
-        .await
-        .context("Could not fetch database size")?;
+        let (sz,): (String,) =
+            sqlx::query_as("SELECT pg_size_pretty(pg_database_size(current_database()))")
+                .fetch_one(self.conn_mut()?)
+                .await
+                .context("Could not fetch database size")?;
         Ok(sz)
     }
 
@@ -491,10 +497,9 @@ impl BenchmarkSuite {
             sqlx::query_as("SELECT version, githash, build_mode FROM paradedb.version_info();")
                 .fetch_one(conn)
                 .await
-                .unwrap_or_default();
+                .unwrap_or((None, None, None));
         Ok(info)
     }
-    /// Attempt to retrieve a current_setting(...) from Postgres.
 
     async fn get_current_setting(&mut self, key: &str) -> Result<Option<String>> {
         let sql = format!("SELECT current_setting('{key}') AS val;");
@@ -507,7 +512,6 @@ impl BenchmarkSuite {
         }
     }
 
-    /// Return the size of the named index, e.g. "352 kB".
     async fn fetch_index_size(&mut self, idx: &str) -> Result<String> {
         let sql = format!("SELECT pg_size_pretty(pg_relation_size('{idx}'))");
         let (sz,): (String,) = sqlx::query_as(&sql)
@@ -517,14 +521,8 @@ impl BenchmarkSuite {
         Ok(sz)
     }
 
-    /// Return info from paradedb.index_info(idx) if available.
     async fn fetch_paradedb_index_info(&mut self, idx: &str) -> Result<Vec<serde_json::Value>> {
-        let sql = format!(
-            r#"
-            SELECT row_to_json(x)
-            FROM paradedb.index_info('{idx}') x
-            "#,
-        );
+        let sql = format!(r#"SELECT row_to_json(x) FROM paradedb.index_info('{idx}') x"#);
         let rows = sqlx::query_as::<_, (serde_json::Value,)>(sql.as_str())
             .fetch_all(self.conn_mut()?)
             .await
@@ -532,7 +530,6 @@ impl BenchmarkSuite {
         Ok(rows.into_iter().map(|(val,)| val).collect())
     }
 
-    /// Attempt to prewarm the given index via pg_prewarm.
     async fn try_prewarm_index(&mut self, idx: &str) -> Result<()> {
         let _ = sqlx::query("CREATE EXTENSION IF NOT EXISTS pg_prewarm;")
             .execute(self.conn_mut()?)
@@ -547,12 +544,12 @@ impl BenchmarkSuite {
         let now_utc = Utc::now();
         println!("Starting custom index creation step ...");
 
-        // Example: dropping an old index.
+        // Example: dropping an old index
         sqlx::query("DROP INDEX IF EXISTS idx_benchmark_eslogs_bm25;")
             .execute(self.conn_mut()?)
             .await?;
 
-        // Set some desired indexing-related settings.
+        // Example indexing settings
         let desired_settings = [
             ("maintenance_work_mem", "16GB"),
             ("paradedb.statement_parallelism", "1"),
@@ -570,10 +567,9 @@ impl BenchmarkSuite {
             let _ = sqlx::query(&stmt).execute(self.conn_mut()?).await;
         }
 
+        // Start background system monitoring
         let stop_flag = Arc::new(AtomicBool::new(false));
         let sf = Arc::clone(&stop_flag);
-
-        // Collect sysinfo samples in a dedicated thread until creation is done.
         let creation_start = Instant::now();
         let handle = std::thread::spawn(move || -> Vec<SysinfoSample> {
             let mut sys = System::new_all();
@@ -606,7 +602,7 @@ impl BenchmarkSuite {
             samples
         });
 
-        // Example create index command:
+        // Example create index
         let create_sql = r#"
             CREATE INDEX idx_benchmark_eslogs_bm25
             ON public.benchmark_eslogs
@@ -631,14 +627,12 @@ impl BenchmarkSuite {
         "#;
         sqlx::query(create_sql).execute(self.conn_mut()?).await?;
 
-        // Done, collect metrics.
+        // Done
         let duration = creation_start.elapsed();
         stop_flag.store(true, Ordering::SeqCst);
-
-        // Join the background sampler.
         let samples = handle.join().unwrap_or_default();
 
-        // Record the actual settings used.
+        // Record the actual settings used
         let mut index_settings = HashMap::new();
         for (k, _) in &desired_settings {
             if let Ok(Some(val)) = self.get_current_setting(k).await {
@@ -646,7 +640,7 @@ impl BenchmarkSuite {
             }
         }
 
-        // Prewarm for subsequent steps.
+        // Prewarm
         let _ = self.try_prewarm_index("idx_benchmark_eslogs_bm25").await;
 
         let index_size = self
@@ -743,7 +737,7 @@ impl BenchmarkSuite {
         intervals
     }
 
-    /// Parse logs in a scratch directory for aggregated (15-col) and transaction (6-col) lines.
+    /// Parse the combined logs, including 15-column aggregator lines and 6/7‐column transaction lines.
     fn parse_combined_logs_in_dir(
         log_dir: &Path,
     ) -> (Vec<PgBenchTransactionLog>, Vec<PgBenchAggregateIntervalRow>) {
@@ -754,14 +748,29 @@ impl BenchmarkSuite {
             for entry in entries.flatten() {
                 let path = entry.path();
                 let fname = path.file_name().unwrap_or_default().to_string_lossy();
+
+                // We only parse files named "pgbench_log.*"
                 if !fname.starts_with("pgbench_log.") {
                     continue;
                 }
                 if let Ok(content) = fs::read_to_string(&path) {
                     for line in content.lines() {
                         let parts: Vec<_> = line.split_whitespace().collect();
-                        if let Ok(row) = Self::parse_15_column_aggregated_line(&parts) {
-                            agg_rows.push(row);
+                        match parts.len() {
+                            15 => {
+                                if let Ok(row) = Self::parse_15_column_aggregated_line(&parts) {
+                                    agg_rows.push(row);
+                                }
+                            }
+                            // For transaction lines, we now handle 6 OR 7
+                            6 | 7 => {
+                                if let Ok(tx) = Self::parse_transaction_line_any_format(&parts) {
+                                    tx_logs.push(tx);
+                                }
+                            }
+                            _ => {
+                                // Not recognized
+                            }
                         }
                     }
                 }
@@ -770,7 +779,6 @@ impl BenchmarkSuite {
         (tx_logs, agg_rows)
     }
 
-    /// Parse a 15-column aggregated interval line.
     fn parse_15_column_aggregated_line(parts: &[&str]) -> Result<PgBenchAggregateIntervalRow> {
         if parts.len() != 15 {
             bail!("Not a 15-column aggregated line");
@@ -794,37 +802,94 @@ impl BenchmarkSuite {
         })
     }
 
-    /// Parse a 6-column per-transaction line from pgbench's -l logs.
-    fn parse_6_column_transaction_line(csv_parts: &[&str]) -> Result<PgBenchTransactionLog> {
-        // Format: thread_id, client_id, xact_id, total_time_secs, latency_secs, stmt_name
-        if csv_parts.len() != 6 {
-            bail!("Not a 6-column transaction line");
+    /// [UPDATED] Parse a single transaction line in either 6‐column or 7‐column format.
+    ///
+    /// - 6 columns (legacy):
+    ///   `thread_id client_id xact_id total_time_secs latency_secs stmt_name`
+    ///
+    /// - 7 columns (e.g. `--report-per-command`):
+    ///   `thread_id client_id xact_id total_time_secs latency_secs cmd_index stmt_name`
+    ///
+    /// We'll treat `cmd_index` as an unused field, but parse the last column as `stmt_name`.
+    fn parse_transaction_line_any_format(parts: &[&str]) -> Result<PgBenchTransactionLog> {
+        match parts.len() {
+            6 => {
+                // old format
+                // e.g. 0 0 1 1.045678 0.123456 SELECT
+                let client_id = parts[1].trim().parse::<u32>()?;
+                let transaction_id = parts[2].trim().parse::<u32>()?;
+                let time_secs = parts[3].trim().parse::<f64>()?;
+                let latency_secs = parts[4].trim().parse::<f64>()?;
+                let stmt_name = parts[5].to_string();
+                Ok(PgBenchTransactionLog {
+                    client_id,
+                    transaction_id,
+                    time_secs,
+                    latency_secs,
+                    stmt_name,
+                })
+            }
+            7 => {
+                // e.g. with --report-per-command
+                // 0 0 1 1.045678 0.123456 0 SELECT
+                // Here parts[5] is cmd_index, parts[6] is the actual statement name
+                let client_id = parts[1].trim().parse::<u32>()?;
+                let transaction_id = parts[2].trim().parse::<u32>()?;
+                let time_secs = parts[3].trim().parse::<f64>()?;
+                let latency_secs = parts[4].trim().parse::<f64>()?;
+                // skip parts[5] (cmd_index)
+                let stmt_name = parts[6].to_string();
+                Ok(PgBenchTransactionLog {
+                    client_id,
+                    transaction_id,
+                    time_secs,
+                    latency_secs,
+                    stmt_name,
+                })
+            }
+            _ => {
+                bail!("Not a recognized transaction line: {:?}", parts);
+            }
         }
-        let client_id = csv_parts[1].trim().parse::<u32>()?;
-        let transaction_id = csv_parts[2].trim().parse::<u32>()?;
-        let time_secs = csv_parts[3].trim().parse::<f64>()?;
-        let latency_secs = csv_parts[4].trim().parse::<f64>()?;
-        let stmt_name = csv_parts[5].trim().to_string();
-
-        Ok(PgBenchTransactionLog {
-            client_id,
-            transaction_id,
-            time_secs,
-            latency_secs,
-            stmt_name,
-        })
     }
 
     fn transform_sql_to_prepared(user_sql: &str, mem_val: &str) -> String {
-        // If user_sql contains multiple statements, that might cause an error.
-        // But for single-statement queries, it works well.
-
         format!(
             "\
-            SET maintenance_work_mem = '{mem_val}';\n\
-            PREPARE my_statement AS\n{user_sql}\n;\n\
-            EXECUTE my_statement;\n"
+             SET maintenance_work_mem = '{mem_val}';\n\
+             PREPARE my_statement AS\n{user_sql};\n\
+             EXECUTE my_statement;\n"
         )
+    }
+
+    /// Group the per-transaction logs by stmt_name, collect latencies, compute stats.
+    fn group_and_compute_per_statement_stats(
+        tx_logs: &[PgBenchTransactionLog],
+    ) -> Vec<StatementLatencyStats> {
+        use std::collections::HashMap;
+
+        // Group latencies by stmt_name
+        let mut map: HashMap<String, Vec<f64>> = HashMap::new();
+        for tx in tx_logs {
+            // convert to ms
+            let ms = tx.latency_secs * 1000.0;
+            map.entry(tx.stmt_name.clone()).or_default().push(ms);
+        }
+
+        // For each statement, compute stats
+        let mut results = Vec::new();
+        for (stmt_name, latencies) in map.into_iter() {
+            if let Some(stat) = compute_latency_stats(&latencies) {
+                results.push(StatementLatencyStats {
+                    stmt_name,
+                    calls: latencies.len(),
+                    latency: stat,
+                });
+            }
+        }
+        // Sort them by statement name for consistency
+        results.sort_by(|a, b| a.stmt_name.cmp(&b.stmt_name));
+        results
     }
 
     /// Run pgbench for a single `.sql` test file, parse results, compute stats, etc.
@@ -839,13 +904,14 @@ impl BenchmarkSuite {
         let base_name = sql_file
             .file_stem()
             .and_then(|s| s.to_str())
-            .unwrap_or("unknown_sql");
+            .unwrap_or("unknown_sql")
+            .to_string();
 
-        // Read user-provided SQL script.
+        // read file
         let sql_content = fs::read_to_string(sql_file)
             .with_context(|| format!("Could not read file: {}", sql_file.display()))?;
 
-        // We'll insert a small SET line and then the user script.
+        // create temp file with SET + user script
         let (tmp_sql_path, tmp_sql_file) =
             tempfile::NamedTempFile::new().and_then(|f| Ok((f.path().to_path_buf(), f)))?;
         {
@@ -855,17 +921,16 @@ impl BenchmarkSuite {
             writer.write_all(sql_content.as_bytes())?;
         }
 
-        // Record DB size before
+        // DB size before
         let db_size_before = self.fetch_db_size().await.ok();
 
-        // Reset pg_stat_statements (if available) so we see only this test's queries
+        // reset pg_stat_statements
         self.reset_pg_stat_statements().await?;
 
-        // We'll store logs in a throwaway scratch dir
+        // run pgbench
         let scratch_dir = tempfile::tempdir()?;
         let scratch_path = scratch_dir.path();
 
-        // Prepare the pgbench invocation
         let mut cmd = Command::new("pgbench");
         cmd.current_dir(scratch_path)
             .arg("--client")
@@ -873,20 +938,16 @@ impl BenchmarkSuite {
             .arg("--transactions")
             .arg(self.config.transactions.to_string())
             .arg("--no-vacuum")
-            // We'll capture each transaction log, plus aggregated intervals:
             .arg("-l")
             .arg("--aggregate-interval=1")
             .arg("--log-prefix=pgbench_log")
-            // Insert any custom args (notably --protocol=prepared if not set)
             .args(&self.config.pgbench_extra_args)
             .arg("--file")
             .arg(&tmp_sql_path)
-            // Finally, the DB URL
             .arg(&self.config.db_url)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // Execute
         let output = cmd.output()?;
         if !output.status.success() {
             let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -898,16 +959,16 @@ impl BenchmarkSuite {
                 stderr_str
             );
         }
-
-        // Parse stdout for TPS, average latency, etc.
         let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+
+        // parse intervals from stdout
         let intervals = Self::parse_aggregate_intervals(&stdout_str);
 
-        // Parse logs for 6-col & 15-col lines
+        // parse the combined logs for this run
         let (transaction_log, aggregated_intervals) =
             Self::parse_combined_logs_in_dir(scratch_path);
 
-        // Attempt to glean "tps = X" and "latency average = Y ms"
+        // glean tps / lat from stdout
         let mut tps = None;
         let mut avg_latency = None;
         for line in stdout_str.lines() {
@@ -928,9 +989,12 @@ impl BenchmarkSuite {
             }
         }
 
-        // Attempt to gather top statements from pg_stat_statements
+        // top statements
         let top_statements = if self.pg_stat_statements_available() {
-            self.fetch_top_statements_sync()?
+            match self.fetch_top_statements_sync() {
+                Ok(r) => r,
+                Err(_) => vec![],
+            }
         } else {
             vec![]
         };
@@ -940,16 +1004,20 @@ impl BenchmarkSuite {
 
         let duration = start_instant.elapsed();
 
-        // Compute min/max/stddev/p99 from the per-transaction log
+        // compute overall transaction-level stats
         let latencies: Vec<f64> = transaction_log
             .iter()
             .map(|t| t.latency_secs * 1000.0)
             .collect();
         let computed_latency_stats = compute_latency_stats(&latencies);
 
+        // Now compute per‐statement latencies
+        let statement_latency_details =
+            Self::group_and_compute_per_statement_stats(&transaction_log);
+
         Ok(PgBenchTestResult {
-            test_name: test_name.into(),
-            sql_file: base_name.into(),
+            test_name: test_name.to_string(),
+            sql_file: base_name,
             start_time_utc: start_utc,
             end_time_utc: Utc::now(),
             duration_seconds: duration.as_secs_f64(),
@@ -962,30 +1030,31 @@ impl BenchmarkSuite {
             transaction_log,
             aggregated_intervals,
             computed_latency_stats,
+            statement_latency_details,
         })
     }
 
     /// Main entry point to run index creation (optionally) then all SQL tests.
     pub async fn run_all_benchmarks(&mut self) -> Result<()> {
-        // Record DB size at start
+        // DB size at start
         let initial_size = self.fetch_db_size().await.unwrap_or("<Unknown>".into());
         self.report.db_size_before = Some(initial_size);
 
-        // If skipping index is false, do a custom index creation step:
+        // Possibly create custom index
         if !self.config.skip_index {
             let idx_result = self.benchmark_index_creation().await?;
             self.report.index_creation_benchmark = Some(idx_result);
         }
 
-        // Now, run pgbench on each .sql found in the specified folder.
+        // run pgbench on each .sql
         let entries = fs::read_dir(&self.config.sql_folder)
             .with_context(|| format!("Could not read directory: {:?}", self.config.sql_folder))?;
 
         for entry in entries {
             let path = entry?.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("sql") {
+            if path.extension().and_then(|e| e.to_str()) == Some("sql") {
                 println!(
-                    "Running pgbench for SQL file \"{}\" (run {} times, concurrency=1)",
+                    "Running pgbench for SQL file \"{}\" ({} transactions, concurrency=1)...",
                     path.display(),
                     self.config.transactions
                 );
@@ -1001,7 +1070,7 @@ impl BenchmarkSuite {
         // Mark suite finished
         self.report.suite_finished_at = Some(Utc::now());
 
-        // Insert JSON into the specified table
+        // Insert JSON
         self.insert_report().await?;
         println!(
             "All benchmarks complete; final JSON inserted into table \"{}\".\nGit hash: {:?}",
@@ -1010,7 +1079,6 @@ impl BenchmarkSuite {
         Ok(())
     }
 
-    /// Write the final JSON report to the specified Postgres table.
     async fn insert_report(&mut self) -> Result<()> {
         let val = serde_json::to_value(&self.report)?;
         let insert_sql = format!(
