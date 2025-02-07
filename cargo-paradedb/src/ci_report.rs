@@ -6,8 +6,7 @@ use sqlx::postgres::PgConnectOptions;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-use minijinja::{Environment, Source};
+use minijinja::{Environment, Error};
 
 pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<()> {
     // 1) Connect to the DB
@@ -36,7 +35,7 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
 
     // 3) Load the Minijinja template from templates/report.html
     let mut env = Environment::new();
-    let mut source = Source::new();
+    let mut source = minijinja::Source::new();
     source.load_path("templates")?;
     env.set_source(source);
     let tmpl = env.get_template("report.html")?;
@@ -48,5 +47,21 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
 
     // 5) Print (or write) the resulting HTML
     println!("{}", rendered);
+    Ok(())
+}
+
+/// Replace or create a Minijinja template by name.
+///
+/// If a template with this `name` already exists in `env`, it is removed,
+/// then re‐added with new `source`.
+pub fn replace_template_source<'source>(
+    env: &mut Environment<'source>,
+    name: &'source str,
+    source: &'source str,
+) -> Result<(), Error> {
+    // Remove the old template if present
+    env.remove_template(name);
+    // Add the new version
+    env.add_template(name, source)?;
     Ok(())
 }
