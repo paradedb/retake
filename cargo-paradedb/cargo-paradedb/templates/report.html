@@ -1,0 +1,10 @@
+<h3>Index Settings</h3>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  {% for k in report.index_creation_benchmark.index_settings %}
+  <tr>
+    <td>{{ k }}</td>
+    <td>{{ report.index_creation_benchmark.index_settings[k] }}</td>
+  </tr>
+  {% endfor %}
+</table>
