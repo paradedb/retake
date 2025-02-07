@@ -4,143 +4,140 @@
 <html lang="en">
 
 <head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/hack/0.8.1/hack.css" />
+  <title>ParadeDB CI Report - {{ short_hash }}</title>
+  <style>
+    /* Basic Resets */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  <head>
-    <meta charset="utf-8" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/hack/0.8.1/hack.css" />
-    <title>ParadeDB CI Report - {{ short_hash }}</title>
-    <style>
-      /* Basic Resets */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+    body {
+      background-color: #f9f9f9;
+      color: #333;
+    }
 
-      body {
-        background-color: #f9f9f9;
-        color: #333;
-      }
+    /* Header / Title Bar */
+    header {
+      background: #282c34;
+      color: #fff;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
 
-      /* Header / Title Bar */
-      header {
-        background: #282c34;
-        color: #fff;
-        padding: 20px;
-        margin-bottom: 20px;
-        text-align: center;
-      }
+    header .hash-highlight {
+      color: #e74c3c;
+      font-weight: bold;
+    }
 
-      header .hash-highlight {
-        color: #e74c3c;
-        font-weight: bold;
-      }
+    /* Container for the body content */
+    .container {
+      width: 90%;
+      max-width: 1200px;
+      margin: 0 auto 30px auto;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      border-radius: 8px;
+    }
 
-      /* Container for the body content */
-      .container {
-        width: 90%;
-        max-width: 1200px;
-        margin: 0 auto 30px auto;
-        background: #fff;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        border-radius: 8px;
-      }
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-bottom: 10px;
+    }
 
-      h1,
-      h2,
-      h3,
-      h4 {
-        margin-bottom: 10px;
-      }
+    h2 {
+      margin-top: 1em;
+      border-bottom: 2px solid #ccc;
+      padding-bottom: 5px;
+    }
 
-      h2 {
-        margin-top: 1em;
-        border-bottom: 2px solid #ccc;
-        padding-bottom: 5px;
-      }
+    hr {
+      margin: 1em 0;
+      border: none;
+      border-top: 1px solid #eee;
+    }
 
-      hr {
-        margin: 1em 0;
-        border: none;
-        border-top: 1px solid #eee;
-      }
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 1em;
+    }
 
-      /* Tables */
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-bottom: 1em;
-      }
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
 
-      th,
-      td {
-        border: 1px solid #ddd;
-        padding: 8px;
-      }
+    tr:nth-child(even) {
+      background-color: #f5f5f5;
+    }
 
-      tr:nth-child(even) {
-        background-color: #f5f5f5;
-      }
+    th {
+      background-color: #eeeeee;
+      text-align: left;
+    }
 
-      th {
-        background-color: #eeeeee;
-        text-align: left;
-      }
+    td code {
+      font-size: 0.9em;
+      background: #fafafa;
+      padding: 2px 4px;
+      border-radius: 4px;
+      color: #333;
+    }
 
-      td code {
-        font-size: 0.9em;
-        background: #fafafa;
-        padding: 2px 4px;
-        border-radius: 4px;
-        color: #333;
-      }
+    /* Info Panels */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
 
-      /* Info Panels */
-      .info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 20px;
-        margin-bottom: 20px;
-      }
+    .info-box {
+      background: #fdfdfd;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px 15px;
+    }
 
-      .info-box {
-        background: #fdfdfd;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        padding: 10px 15px;
-        margin: 0px 15px;
-      }
+    .info-box h3 {
+      font-size: 1.1em;
+      margin-bottom: 0.5em;
+      color: #555;
+    }
 
-      .info-box h3 {
-        font-size: 1.1em;
-        margin-bottom: 0.5em;
-        color: #555;
-      }
+    .info-box p {
+      margin: 4px 0;
+      font-size: 0.95em;
+    }
 
-      .info-box p {
-        margin: 4px 0;
-        font-size: 0.95em;
-      }
+    /* Subtle highlight for key data */
+    .highlighted {
+      background: #f9f1e7;
+      padding: 4px 6px;
+      border-radius: 4px;
+      color: #c0392b;
+      font-weight: bold;
+    }
 
-      /* Subtle highlight for key data */
-      .highlighted {
-        background: #f9f1e7;
-        padding: 4px 6px;
-        border-radius: 4px;
-        color: #c0392b;
-        font-weight: bold;
-      }
-
-      /* Footer */
-      footer {
-        text-align: center;
-        color: #666;
-        font-size: 0.9em;
-        padding: 10px;
-      }
-    </style>
-  </head>
+    /* Footer */
+    footer {
+      text-align: center;
+      color: #666;
+      font-size: 0.9em;
+      padding: 10px;
+    }
+  </style>
+</head>
 
 <body>
 
@@ -162,22 +159,10 @@
           <h3>Build Mode</h3>
           <p>{{ report.extension_build_mode }}</p>
         </div>
-        <!-- <div class="info-box"> -->
-        <!-- <h3>DB Size Before</h3> -->
-        <!-- <p>{{ report.db_size_before }}</p> -->
-        <!-- </div> -->
-        <!-- <div class="info-box"> -->
-        <!-- <h3>DB Size After</h3> -->
-        <!-- <p>{{ report.db_size_after }}</p> -->
-        <!-- </div> -->
         <div class="info-box">
           <h3>Tuples in Relation</h3>
           <p>{{ report.reltuples }}</p>
         </div>
-        <!-- <div class="info-box"> -->
-        <!-- <h3>Connection OK?</h3> -->
-        <!-- <p>{{ report.connection_ok }}</p> -->
-        <!-- </div> -->
       </div>
       <p><strong>Suite Started:</strong> {{ report.suite_started_at }} <br />
         <strong>Suite Finished:</strong> {{ report.suite_finished_at }}
@@ -255,12 +240,12 @@
           <th>Setting</th>
           <th>Value</th>
         </tr>
-        <!-- {% for k, v in report.index_creation_benchmark.index_settings[k] %} -->
-        <!-- <tr> -->
-        <!-- <td>{{ k }}</td> -->
-        <!-- <td>{{ v }}</td> -->
-        <!-- </tr> -->
-        <!-- {% endfor %} -->
+        {% for k in report.index_creation_benchmark.index_settings %}
+        <tr>
+          <td>{{ k }}</td>
+          <td>{{ report.index_creation_benchmark.index_settings[k] }}</td>
+        </tr>
+        {% endfor %}
       </table>
 
       <h3>Segment Info</h3>
@@ -270,7 +255,6 @@
           <th>Visible</th>
           <th>Num Docs</th>
           <th>Byte Size</th>
-          <!-- <th>Deleted Docs</th> -->
           <th>Postings</th>
           <th>Positions</th>
           <th>Termdict</th>
@@ -281,7 +265,6 @@
           <td>{{ seg.visible }}</td>
           <td>{{ seg.num_docs }}</td>
           <td>{{ seg.byte_size }}</td>
-          <!-- <td>{{ seg.num_deleted }}</td> -->
           <td>{{ seg.postings_bytes }}</td>
           <td>{{ seg.positions_bytes }}</td>
           <td>{{ seg.termdict_bytes }}</td>
@@ -297,8 +280,6 @@
           <th>CPU Usage (%)</th>
           <th>Used Memory (Bytes)</th>
           <th>Total Memory (Bytes)</th>
-          <!-- <th>Total Read (Bytes)</th> -->
-          <!-- <th>Total Written (Bytes)</th> -->
         </tr>
         {% for sample in report.index_creation_benchmark.sysinfo_samples %}
         <tr>
@@ -306,8 +287,6 @@
           <td>{{ sample.cpu_usage_percent }}</td>
           <td>{{ sample.used_memory_bytes }}</td>
           <td>{{ sample.total_memory_bytes }}</td>
-          <!-- <td>{{ sample.total_read_bytes }}</td> -->
-          <!-- <td>{{ sample.total_written_bytes }}</td> -->
         </tr>
         {% endfor %}
       </table>
@@ -340,69 +319,21 @@
       <h4>Latency Stats</h4>
       <table>
         <tr>
-          <th>Min (us)</th>
-          <th>Max (us)</th>
-          <th>P99 (us)</th>
-          <th>Mean (us)</th>
-          <th>Stddev (us)</th>
+          <th>Min (ms)</th>
+          <th>Max (ms)</th>
+          <th>P99 (ms)</th>
+          <th>Mean (ms)</th>
+          <th>Stddev (ms)</th>
         </tr>
         <tr>
-          <td>{{ test.computed_latency_stats.min_us }}</td>
-          <td>{{ test.computed_latency_stats.max_us }}</td>
-          <td>{{ test.computed_latency_stats.p99_us }}</td>
-          <td>{{ test.computed_latency_stats.mean_us }}</td>
-          <td>{{ test.computed_latency_stats.stddev_us }}</td>
+          <td>{{ (test.computed_latency_stats.min_us / 1000.0)|round(2) }}</td>
+          <td>{{ (test.computed_latency_stats.max_us / 1000.0)|round(2) }}</td>
+          <td>{{ (test.computed_latency_stats.p99_us / 1000.0)|round(2) }}</td>
+          <td>{{ (test.computed_latency_stats.mean_us / 1000.0)|round(2) }}</td>
+          <td>{{ (test.computed_latency_stats.stddev_us / 1000.0)|round(2) }}</td>
         </tr>
       </table>
       {% endif %}
-
-      <!-- Top Statements -->
-      <!-- {% if test.top_statements and test.top_statements|length > 0 %} -->
-      <!-- <h4>Top Statements</h4> -->
-      <!-- <table> -->
-      <!-- <tr> -->
-      <!-- <th>Query</th> -->
-      <!-- <th>Calls</th> -->
-      <!-- <th>Rows</th> -->
-      <!-- <th>Total Time (ms)</th> -->
-      <!-- </tr> -->
-      <!-- {% for stmt in test.top_statements %} -->
-      <!-- <tr> -->
-      <!-- <td><code>{{ stmt.query }}</code></td> -->
-      <!-- <td>{{ stmt.calls }}</td> -->
-      <!-- <td>{{ stmt.rows }}</td> -->
-      <!-- <td>{{ stmt.total_time_ms }}</td> -->
-      <!-- </tr> -->
-      <!-- {% endfor %} -->
-      <!-- </table> -->
-      <!-- {% endif %} -->
-
-      <!-- Aggregated Intervals (if any) -->
-      <!-- {% if test.aggregated_intervals and test.aggregated_intervals|length > 0 %} -->
-      <!-- <h4>Aggregated Intervals</h4> -->
-      <!-- <table> -->
-      <!-- <tr> -->
-      <!-- <th>Interval Start</th> -->
-      <!-- <th>Num Tx</th> -->
-      <!-- <th>Max Latency (µs)</th> -->
-      <!-- <th>Min Latency (µs)</th> -->
-      <!-- <th>Sum Latency (µs)</th> -->
-      <!-- <th>Deadlocks</th> -->
-      <!-- <th>Serialization Failures</th> -->
-      <!-- </tr> -->
-      <!-- {% for interval in test.aggregated_intervals %} -->
-      <!-- <tr> -->
-      <!-- <td>{{ interval.interval_start }}</td> -->
-      <!-- <td>{{ interval.num_transactions }}</td> -->
-      <!-- <td>{{ interval.max_latency }}</td> -->
-      <!-- <td>{{ interval.min_latency }}</td> -->
-      <!-- <td>{{ interval.sum_latency }}</td> -->
-      <!-- <td>{{ interval.deadlock_failures }}</td> -->
-      <!-- <td>{{ interval.serialization_failures }}</td> -->
-      <!-- </tr> -->
-      <!-- {% endfor %} -->
-      <!-- </table> -->
-      <!-- {% endif %} -->
 
       <hr />
       {% endfor %}
