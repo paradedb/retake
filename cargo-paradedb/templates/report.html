@@ -1,1 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>ParadeDB CI Report for {{ report.extension_sha }}</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        background-color: #f9f9f9;
+        margin: 0;
+        padding: 0;
+      }
+      header {
+        background: #333;
+        color: #fff;
+        padding: 1em;
+      }
+      h1, h2 {
+        margin: 0 0 0.25em 0;
+      }
+      .container {
+        padding: 1em;
+      }
+      .highlight {
+        color: #c0392b;
+        font-weight: bold;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 1em;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 0.5em;
+      }
+      tr:nth-child(even) { background-color: #eee; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>ParadeDB CI Report: <span class="highlight">{{ report.extension_sha }}</span></h1>
+    </header>
+    <div class="container">
+      <h2>Configuration</h2>
+      <ul>
+        <li>DB URL: {{ report.config.db_url }}</li>
+        <li>Skip Index?: {{ report.config.skip_index }}</li>
+        <li>SQL Folder: {{ report.config.sql_folder }}</li>
+        <li>Report Table: {{ report.config.report_table }}</li>
+        <li>Maintenance Work Mem: {{ report.config.maintenance_work_mem }}</li>
+      </ul>
 
+      <h2>pgbench Tests</h2>
+      {% for test in report.pgbench_tests %}
+        <p><strong>SQL File:</strong> {{ test.sql_file }}</p>
+        <p>TPS: {{ test.tps }}, Latency: {{ test.latency_ms }} ms, Duration: {{ test.duration_seconds }} s</p>
+        <p>Items Matched: {{ test.items_matched }}</p>
+        <hr>
+      {% endfor %}
+    </div>
+  </body>
+</html>
