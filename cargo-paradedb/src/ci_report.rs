@@ -1,12 +1,11 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use async_std::task::block_on;
+use minijinja::Environment;
 use serde_json::Value;
-use sqlx::{Connection, PgConnection};
 use sqlx::postgres::PgConnectOptions;
+use sqlx::{Connection, PgConnection};
 use std::fs;
-use std::path::PathBuf;
 use std::str::FromStr;
-use minijinja::{Environment, Error};
 
 pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<()> {
     // 1) Connect to the DB
@@ -15,16 +14,14 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
 
     // 2) Fetch the most recent JSON row with matching git_hash prefix
     let row = block_on(
-        sqlx::query_as::<_, (Option<Value>,)>(
-            &format!(
-                "SELECT report_data
+        sqlx::query_as::<_, (Option<Value>,)>(&format!(
+            "SELECT report_data
                  FROM {table}
                  WHERE git_hash LIKE ($1 || '%')
                  ORDER BY created_at DESC
                  LIMIT 1",
-                table = report_table
-            )
-        )
+            table = report_table
+        ))
         .bind(git_hash)
         .fetch_optional(&mut conn),
     )?;
@@ -34,7 +31,10 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
     };
 
     // 3) Load the HTML file manually, then add it to our environment
-    let template_str = fs::read_to_string("templates/report.html")?;
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("templates")
+        .join("report.html");
+    let template_str = fs::read_to_string(&path)?;
     let mut env = Environment::new();
     // Add it under the name "report.html"
     env.add_template("report.html", &template_str)?;
@@ -48,21 +48,5 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
 
     // 5) Print (or write) the resulting HTML
     println!("{}", rendered);
-    Ok(())
-}
-
-/// Replace or create a Minijinja template by name.
-///
-/// If a template with this `name` already exists in `env`, it is removed,
-/// then re‐added with new `source`.
-pub fn replace_template_source<'source>(
-    env: &mut Environment<'source>,
-    name: &'source str,
-    source: &'source str,
-) -> Result<(), Error> {
-    // Remove the old template if present
-    env.remove_template(name);
-    // Add the new version
-    env.add_template(name, source)?;
     Ok(())
 }

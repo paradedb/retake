@@ -184,6 +184,7 @@ pub enum EsLogsCommand {
         #[clap(long)]
         skip_index: bool,
     },
+    #[clap(name = "report-ci-suite")]
     ReportCiSuite {
         /// The short git hash to query for
         git_hash: String,

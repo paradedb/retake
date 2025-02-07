@@ -1,63 +1,416 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>ParadeDB CI Report for {{ report.extension_sha }}</title>
-    <style>
-      body {
-        font-family: sans-serif;
-        background-color: #f9f9f9;
-        margin: 0;
-        padding: 0;
-      }
-      header {
-        background: #333;
-        color: #fff;
-        padding: 1em;
-      }
-      h1, h2 {
-        margin: 0 0 0.25em 0;
-      }
-      .container {
-        padding: 1em;
-      }
-      .highlight {
-        color: #c0392b;
-        font-weight: bold;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-bottom: 1em;
-      }
-      th, td {
-        border: 1px solid #ccc;
-        padding: 0.5em;
-      }
-      tr:nth-child(even) { background-color: #eee; }
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>ParadeDB CI Report: <span class="highlight">{{ report.extension_sha }}</span></h1>
-    </header>
-    <div class="container">
-      <h2>Configuration</h2>
-      <ul>
-        <li>DB URL: {{ report.config.db_url }}</li>
-        <li>Skip Index?: {{ report.config.skip_index }}</li>
-        <li>SQL Folder: {{ report.config.sql_folder }}</li>
-        <li>Report Table: {{ report.config.report_table }}</li>
-        <li>Maintenance Work Mem: {{ report.config.maintenance_work_mem }}</li>
-      </ul>
+{% set short_hash = report.extension_sha[:7] %}
 
-      <h2>pgbench Tests</h2>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>ParadeDB CI Report - {{ short_hash }}</title>
+  <style>
+    /* Basic Resets */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+
+    /* Header / Title Bar */
+    header {
+      background: #282c34;
+      color: #fff;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    header .hash-highlight {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+
+    /* Container for the body content */
+    .container {
+      width: 90%;
+      max-width: 1200px;
+      margin: 0 auto 30px auto;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      margin-top: 1em;
+      border-bottom: 2px solid #ccc;
+      padding-bottom: 5px;
+    }
+
+    hr {
+      margin: 1em 0;
+      border: none;
+      border-top: 1px solid #eee;
+    }
+
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 1em;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f5f5f5;
+    }
+
+    th {
+      background-color: #eeeeee;
+      text-align: left;
+    }
+
+    td code {
+      font-size: 0.9em;
+      background: #fafafa;
+      padding: 2px 4px;
+      border-radius: 4px;
+      color: #333;
+    }
+
+    /* Info Panels */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .info-box {
+      background: #fdfdfd;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px 15px;
+    }
+
+    .info-box h3 {
+      font-size: 1.1em;
+      margin-bottom: 0.5em;
+      color: #555;
+    }
+
+    .info-box p {
+      margin: 4px 0;
+      font-size: 0.95em;
+    }
+
+    /* Subtle highlight for key data */
+    .highlighted {
+      background: #f9f1e7;
+      padding: 4px 6px;
+      border-radius: 4px;
+      color: #c0392b;
+      font-weight: bold;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: #666;
+      font-size: 0.9em;
+      padding: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>ParadeDB CI Report &mdash; Git: <span class="hash-highlight">{{ short_hash }}</span></h1>
+  </header>
+
+  <div class="container">
+
+    <!-- High-Level Suite Info -->
+    <section>
+      <h2>Suite Summary</h2>
+      <div class="info-grid">
+        <div class="info-box">
+          <h3>Extension Version</h3>
+          <p>{{ report.extension_version }}</p>
+        </div>
+        <div class="info-box">
+          <h3>Build Mode</h3>
+          <p>{{ report.extension_build_mode }}</p>
+        </div>
+        <!-- <div class="info-box"> -->
+        <!-- <h3>DB Size Before</h3> -->
+        <!-- <p>{{ report.db_size_before }}</p> -->
+        <!-- </div> -->
+        <!-- <div class="info-box"> -->
+        <!-- <h3>DB Size After</h3> -->
+        <!-- <p>{{ report.db_size_after }}</p> -->
+        <!-- </div> -->
+        <div class="info-box">
+          <h3>Tuples in Relation</h3>
+          <p>{{ report.reltuples }}</p>
+        </div>
+        <!-- <div class="info-box"> -->
+        <!-- <h3>Connection OK?</h3> -->
+        <!-- <p>{{ report.connection_ok }}</p> -->
+        <!-- </div> -->
+      </div>
+      <p><strong>Suite Started:</strong> {{ report.suite_started_at }} <br />
+        <strong>Suite Finished:</strong> {{ report.suite_finished_at }}
+      </p>
+    </section>
+
+    <hr />
+
+    <!-- Configuration Details -->
+    <section>
+      <h2>Configuration</h2>
+      <table>
+        <tr>
+          <th>DB URL</th>
+          <td>{{ report.config.db_url }}</td>
+        </tr>
+        <tr>
+          <th>Skip Index?</th>
+          <td>{{ report.config.skip_index }}</td>
+        </tr>
+        <tr>
+          <th>SQL Folder</th>
+          <td>{{ report.config.sql_folder }}</td>
+        </tr>
+        <tr>
+          <th>Report Table</th>
+          <td>{{ report.config.report_table }}</td>
+        </tr>
+        <tr>
+          <th>Clients</th>
+          <td>{{ report.config.clients }}</td>
+        </tr>
+        <tr>
+          <th>Transactions</th>
+          <td>{{ report.config.transactions }}</td>
+        </tr>
+        <tr>
+          <th>PG Bench Extra Args</th>
+          <td>
+            {% for arg in report.config.pgbench_extra_args %}
+            <code>{{ arg }}</code>
+            {% endfor %}
+          </td>
+        </tr>
+        <tr>
+          <th>Maintenance Work Mem</th>
+          <td>{{ report.config.maintenance_work_mem }}</td>
+        </tr>
+      </table>
+      {% if report.maintenance_work_mem_info %}
+      <div class="info-box" style="margin-top:10px;">
+        <h3>Maintenance Work Mem Details</h3>
+        <p><strong>Configured:</strong> {{ report.maintenance_work_mem_info.configured }}</p>
+        <p><strong>Effective Value:</strong> {{ report.maintenance_work_mem_info.effective_value }}</p>
+        <p><strong>Allowed Max (80% of system):</strong> {{ report.maintenance_work_mem_info.allowed_max_80pct }}</p>
+        <p><strong>Total System Memory:</strong> {{ report.maintenance_work_mem_info.total_system_memory }}</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <hr />
+
+    <!-- Index Creation Benchmark -->
+    {% if report.index_creation_benchmark %}
+    <section>
+      <h2>Index Creation Benchmark</h2>
+      <p><strong>Index Size:</strong> {{ report.index_creation_benchmark.index_size }}</p>
+      <p><strong>Started At:</strong> {{ report.index_creation_benchmark.started_at }} <br />
+        <strong>Finished At:</strong> {{ report.index_creation_benchmark.finished_at }} <br />
+        <strong>Duration (sec):</strong> {{ report.index_creation_benchmark.duration_seconds }}
+      </p>
+      <h3>Index Settings</h3>
+      <table>
+        <tr>
+          <th>Setting</th>
+          <th>Value</th>
+        </tr>
+        <!-- {% for k, v in report.index_creation_benchmark.index_settings[k] %} -->
+        <!-- <tr> -->
+        <!-- <td>{{ k }}</td> -->
+        <!-- <td>{{ v }}</td> -->
+        <!-- </tr> -->
+        <!-- {% endfor %} -->
+      </table>
+
+      <h3>Segment Info</h3>
+      <table>
+        <tr>
+          <th>Segment</th>
+          <th>Visible</th>
+          <th>Num Docs</th>
+          <th>Byte Size</th>
+          <!-- <th>Deleted Docs</th> -->
+          <th>Postings</th>
+          <th>Positions</th>
+          <th>Termdict</th>
+        </tr>
+        {% for seg in report.index_creation_benchmark.index_info %}
+        <tr>
+          <td>{{ seg.segno }}</td>
+          <td>{{ seg.visible }}</td>
+          <td>{{ seg.num_docs }}</td>
+          <td>{{ seg.byte_size }}</td>
+          <!-- <td>{{ seg.num_deleted }}</td> -->
+          <td>{{ seg.postings_bytes }}</td>
+          <td>{{ seg.positions_bytes }}</td>
+          <td>{{ seg.termdict_bytes }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+
+      {% if report.index_creation_benchmark.sysinfo_samples %}
+      <h3>System Info During Index Creation</h3>
+      <table>
+        <tr>
+          <th>Timestamp</th>
+          <th>CPU Usage (%)</th>
+          <th>Used Memory (Bytes)</th>
+          <th>Total Memory (Bytes)</th>
+          <!-- <th>Total Read (Bytes)</th> -->
+          <!-- <th>Total Written (Bytes)</th> -->
+        </tr>
+        {% for sample in report.index_creation_benchmark.sysinfo_samples %}
+        <tr>
+          <td>{{ sample.timestamp }}</td>
+          <td>{{ sample.cpu_usage_percent }}</td>
+          <td>{{ sample.used_memory_bytes }}</td>
+          <td>{{ sample.total_memory_bytes }}</td>
+          <!-- <td>{{ sample.total_read_bytes }}</td> -->
+          <!-- <td>{{ sample.total_written_bytes }}</td> -->
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <hr />
+
+    <!-- pgbench Tests -->
+    <section>
+      <h2>PG Bench Tests</h2>
       {% for test in report.pgbench_tests %}
+      <div class="info-box">
+        <h3>Test: {{ test.test_name }}</h3>
         <p><strong>SQL File:</strong> {{ test.sql_file }}</p>
-        <p>TPS: {{ test.tps }}, Latency: {{ test.latency_ms }} ms, Duration: {{ test.duration_seconds }} s</p>
-        <p>Items Matched: {{ test.items_matched }}</p>
-        <hr>
+        <p><strong>TPS:</strong> <span class="highlighted">{{ test.tps }}</span></p>
+        <p><strong>Latency (ms):</strong> {{ test.latency_ms }}</p>
+        <p><strong>Duration (s):</strong> {{ test.duration_seconds }}</p>
+        <p><strong>Items Matched:</strong> {{ test.items_matched }}</p>
+        <p><strong>Start Time UTC:</strong> {{ test.start_time_utc }}<br />
+          <strong>End Time UTC:</strong> {{ test.end_time_utc }}
+        </p>
+        <p><strong>Query:</strong></p>
+        <p><code>{{ test.full_sql }}</code></p>
+      </div>
+
+      <!-- Computed Latency Stats -->
+      {% if test.computed_latency_stats %}
+      <h4>Latency Stats</h4>
+      <table>
+        <tr>
+          <th>Min (us)</th>
+          <th>Max (us)</th>
+          <th>P99 (us)</th>
+          <th>Mean (us)</th>
+          <th>Stddev (us)</th>
+        </tr>
+        <tr>
+          <td>{{ test.computed_latency_stats.min_us }}</td>
+          <td>{{ test.computed_latency_stats.max_us }}</td>
+          <td>{{ test.computed_latency_stats.p99_us }}</td>
+          <td>{{ test.computed_latency_stats.mean_us }}</td>
+          <td>{{ test.computed_latency_stats.stddev_us }}</td>
+        </tr>
+      </table>
+      {% endif %}
+
+      <!-- Top Statements -->
+      {% if test.top_statements and test.top_statements|length > 0 %}
+      <h4>Top Statements</h4>
+      <table>
+        <tr>
+          <th>Query</th>
+          <th>Calls</th>
+          <th>Rows</th>
+          <th>Total Time (ms)</th>
+        </tr>
+        {% for stmt in test.top_statements %}
+        <tr>
+          <td><code>{{ stmt.query }}</code></td>
+          <td>{{ stmt.calls }}</td>
+          <td>{{ stmt.rows }}</td>
+          <td>{{ stmt.total_time_ms }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+
+      <!-- Aggregated Intervals (if any) -->
+      <!-- {% if test.aggregated_intervals and test.aggregated_intervals|length > 0 %} -->
+      <!-- <h4>Aggregated Intervals</h4> -->
+      <!-- <table> -->
+      <!-- <tr> -->
+      <!-- <th>Interval Start</th> -->
+      <!-- <th>Num Tx</th> -->
+      <!-- <th>Max Latency (µs)</th> -->
+      <!-- <th>Min Latency (µs)</th> -->
+      <!-- <th>Sum Latency (µs)</th> -->
+      <!-- <th>Deadlocks</th> -->
+      <!-- <th>Serialization Failures</th> -->
+      <!-- </tr> -->
+      <!-- {% for interval in test.aggregated_intervals %} -->
+      <!-- <tr> -->
+      <!-- <td>{{ interval.interval_start }}</td> -->
+      <!-- <td>{{ interval.num_transactions }}</td> -->
+      <!-- <td>{{ interval.max_latency }}</td> -->
+      <!-- <td>{{ interval.min_latency }}</td> -->
+      <!-- <td>{{ interval.sum_latency }}</td> -->
+      <!-- <td>{{ interval.deadlock_failures }}</td> -->
+      <!-- <td>{{ interval.serialization_failures }}</td> -->
+      <!-- </tr> -->
+      <!-- {% endfor %} -->
+      <!-- </table> -->
+      <!-- {% endif %} -->
+
+      <hr />
       {% endfor %}
-    </div>
-  </body>
+    </section>
+
+  </div> <!-- end container -->
+
+  <footer>
+    <p>&copy; {{ short_hash }} &bull; ParadeDB CI Report</p>
+  </footer>
+
+</body>
+
 </html>
