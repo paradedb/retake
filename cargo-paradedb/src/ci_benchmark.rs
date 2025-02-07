@@ -173,6 +173,7 @@ pub struct BenchmarkReport {
 
     pub index_creation_benchmark: Option<IndexCreationBenchmarkResult>,
     pub pgbench_tests: Vec<PgBenchTestResult>,
+    pub reltuples: Option<i64>,
 }
 
 /// Info about how we handled maintenance_work_mem.
@@ -411,6 +412,7 @@ impl BenchmarkSuite {
             db_size_after: None,
             index_creation_benchmark: None,
             pgbench_tests: vec![],
+            reltuples: None,
         };
 
         Ok(Self {
@@ -1060,6 +1062,19 @@ impl BenchmarkSuite {
 
     /// Main entry point to run everything.
     pub async fn run_all_benchmarks(&mut self) -> Result<()> {
+        // Fetch estimated row count
+        let est = sqlx::query_scalar(
+            r#"SELECT reltuples::bigint AS estimated_rows
+                FROM pg_class
+                WHERE relname = 'benchmark_eslogs';"#
+        )
+        .fetch_one(self.conn_mut()?)
+        .await
+        .context("Could not fetch estimated_rows for 'benchmark_eslogs'")?;
+
+        // Store it in the final report
+        self.report.reltuples = Some(est);
+
         // DB size at start
         let initial_size = self.fetch_db_size().await.unwrap_or("<Unknown>".into());
         self.report.db_size_before = Some(initial_size);
