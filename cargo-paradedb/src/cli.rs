@@ -184,6 +184,17 @@ pub enum EsLogsCommand {
         #[clap(long)]
         skip_index: bool,
     },
+    #[clap(name = "report-ci-suite")]
+    ReportCiSuite {
+        /// The short git hash to query for
+        git_hash: String,
+        /// The database connection URL
+        #[arg(short, long, env = "DATABASE_URL")]
+        url: String,
+        /// The table that stores the final JSON
+        #[clap(long)]
+        report: String,
+    },
 }
 /// The command to run on the hits corpus.
 #[derive(Debug, clap::Subcommand)]
