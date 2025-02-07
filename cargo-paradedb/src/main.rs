@@ -18,6 +18,7 @@
 mod bench_hits;
 mod benchmark;
 mod ci_benchmark;
+mod ci_report;
 mod cli;
 mod elastic;
 mod subcommand;
@@ -125,40 +126,42 @@ fn main() -> Result<()> {
 
                     Ok(())
                 }
-                EsLogsCommand::ReportCiSuite { git_hash, url, report } => {
-                    use std::str::FromStr;
-                    use sqlx::Connection;
-                    use sqlx::postgres::PgConnectOptions;
-                    use sqlx::PgConnection;
+                EsLogsCommand::ReportCiSuite {
+                    git_hash,
+                    url,
+                    report,
+                } => {
                     use serde_json::Value;
+                    use sqlx::postgres::PgConnectOptions;
+                    use sqlx::Connection;
+                    use sqlx::PgConnection;
+                    use std::str::FromStr;
 
                     let conn_opts = PgConnectOptions::from_str(&url)?;
                     let mut conn = block_on(PgConnection::connect_with(&conn_opts))?;
 
                     // Grab the most recent row with the given git_hash
                     let row = block_on(
-                        sqlx::query_as::<_, (Option<Value>,)>(
-                            &format!(
-                                "SELECT report_data
+                        sqlx::query_as::<_, (Option<Value>,)>(&format!(
+                            "SELECT report_data
                                  FROM {table}
                                  WHERE git_hash LIKE ($1 || '%')
                                  ORDER BY created_at DESC
                                  LIMIT 1",
-                                table = report
-                            )
-                        )
+                            table = report
+                        ))
                         .bind(&git_hash)
-                        .fetch_optional(&mut conn)
+                        .fetch_optional(&mut conn),
                     )?;
 
                     // Pretty-print the JSON if found
                     match row {
                         Some((Some(doc),)) => {
                             println!("{}", serde_json::to_string_pretty(&doc)?);
-                        },
+                        }
                         Some((None,)) => {
                             println!("No JSON found in that row!");
-                        },
+                        }
                         None => {
                             println!("No row found with git_hash = {}", git_hash);
                         }
