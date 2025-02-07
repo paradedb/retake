@@ -1,20 +1,3 @@
-// Copyright (c) 2023-2025 Retake, Inc.
-//
-// This file is part of ParadeDB - Postgres for Search and Analytics
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 mod bench_hits;
 mod benchmark;
 mod ci_benchmark;
@@ -126,47 +109,9 @@ fn main() -> Result<()> {
 
                     Ok(())
                 }
-                EsLogsCommand::ReportCiSuite {
-                    git_hash,
-                    url,
-                    report,
-                } => {
-                    use serde_json::Value;
-                    use sqlx::postgres::PgConnectOptions;
-                    use sqlx::Connection;
-                    use sqlx::PgConnection;
-                    use std::str::FromStr;
-
-                    let conn_opts = PgConnectOptions::from_str(&url)?;
-                    let mut conn = block_on(PgConnection::connect_with(&conn_opts))?;
-
-                    // Grab the most recent row with the given git_hash
-                    let row = block_on(
-                        sqlx::query_as::<_, (Option<Value>,)>(&format!(
-                            "SELECT report_data
-                                 FROM {table}
-                                 WHERE git_hash LIKE ($1 || '%')
-                                 ORDER BY created_at DESC
-                                 LIMIT 1",
-                            table = report
-                        ))
-                        .bind(&git_hash)
-                        .fetch_optional(&mut conn),
-                    )?;
-
-                    // Pretty-print the JSON if found
-                    match row {
-                        Some((Some(doc),)) => {
-                            println!("{}", serde_json::to_string_pretty(&doc)?);
-                        }
-                        Some((None,)) => {
-                            println!("No JSON found in that row!");
-                        }
-                        None => {
-                            println!("No row found with git_hash = {}", git_hash);
-                        }
-                    }
-                    Ok(())
+                EsLogsCommand::ReportCiSuite { git_hash, url, report } => {
+                    // Just call our new function in ci_report.rs
+                    ci_report::report_ci_suite(&git_hash, &url, &report)
                 }
             },
             Corpus::Hits(hits) => match hits.command {
