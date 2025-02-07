@@ -433,11 +433,23 @@ impl BenchmarkSuite {
             CREATE TABLE IF NOT EXISTS "{schema}"."{table}" (
                 id BIGSERIAL PRIMARY KEY,
                 created_at TIMESTAMPTZ DEFAULT now(),
-                report_data JSONB NOT NULL
+                git_hash text NOT NULL DEFAULT '',
+                report_data JSONB NOT NULL DEFAULT '{}'
             );
             "#
         );
         sqlx::query(&create_sql).execute(&mut *conn).await?;
+
+        let alter_sql = format!(
+            r#"
+            ALTER TABLE "{schema}"."{table}"
+            ADD COLUMN IF NOT EXISTS git_hash text DEFAULT '',
+            ALTER COLUMN git_hash SET DEFAULT '',
+            ALTER COLUMN git_hash SET NOT NULL,
+            ALTER COLUMN report_data SET DEFAULT '{}';
+            "#
+        );
+        sqlx::query(&alter_sql).execute(conn).await?;
 
         // Verify there's a JSONB column
         let cols = sqlx::query(
