@@ -33,11 +33,12 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
         bail!("No row found with git_hash ~ '{}'", git_hash);
     };
 
-    // 3) Load the Minijinja template from templates/report.html
+    // 3) Load the HTML file manually, then add it to our environment
+    let template_str = fs::read_to_string("templates/report.html")?;
     let mut env = Environment::new();
-    let mut source = minijinja::Source::new();
-    source.load_path("templates")?;
-    env.set_source(source);
+    // Add it under the name "report.html"
+    env.add_template("report.html", &template_str)?;
+
     let tmpl = env.get_template("report.html")?;
 
     // 4) Render the HTML
