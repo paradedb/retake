@@ -434,22 +434,25 @@ impl BenchmarkSuite {
                 id BIGSERIAL PRIMARY KEY,
                 created_at TIMESTAMPTZ DEFAULT now(),
                 git_hash text NOT NULL DEFAULT '',
-                report_data JSONB NOT NULL DEFAULT '{}'
+                report_data JSONB NOT NULL DEFAULT '{{}}'
             );
             "#
         );
         sqlx::query(&create_sql).execute(&mut *conn).await?;
 
+        // After CREATE TABLE IF NOT EXISTS...
         let alter_sql = format!(
             r#"
             ALTER TABLE "{schema}"."{table}"
             ADD COLUMN IF NOT EXISTS git_hash text DEFAULT '',
             ALTER COLUMN git_hash SET DEFAULT '',
-            ALTER COLUMN git_hash SET NOT NULL,
-            ALTER COLUMN report_data SET DEFAULT '{}';
-            "#
+            ADD COLUMN IF NOT EXISTS report_data jsonb DEFAULT '{{}}',
+            ALTER COLUMN report_data SET DEFAULT '{{}}',
+            ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
+            ALTER COLUMN created_at SET DEFAULT now()
+        "#
         );
-        sqlx::query(&alter_sql).execute(conn).await?;
+        sqlx::query(&alter_sql).execute(&mut *conn).await?;
 
         // Verify there's a JSONB column
         let cols = sqlx::query(
@@ -1078,7 +1081,7 @@ impl BenchmarkSuite {
         let est = sqlx::query_scalar(
             r#"SELECT reltuples::bigint AS estimated_rows
                 FROM pg_class
-                WHERE relname = 'benchmark_eslogs';"#
+                WHERE relname = 'benchmark_eslogs';"#,
         )
         .fetch_one(self.conn_mut()?)
         .await
@@ -1133,7 +1136,11 @@ impl BenchmarkSuite {
     async fn insert_report(&mut self) -> Result<()> {
         let json_val = serde_json::to_value(&self.report)?;
         // Use empty string if extension_sha is None
-        let git_hash = self.report.extension_sha.clone().unwrap_or_else(|| "".into());
+        let git_hash = self
+            .report
+            .extension_sha
+            .clone()
+            .unwrap_or_else(|| "".into());
 
         // Insert into your new git_hash text column
         let insert_sql = format!(
