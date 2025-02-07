@@ -59,7 +59,7 @@
     }
 
     hr {
-      margin: 1em 0;
+      margin: 2em 0;
       border: none;
       border-top: 1px solid #eee;
     }
@@ -68,6 +68,7 @@
     table {
       border-collapse: collapse;
       width: 100%;
+      margin: 0;
       margin-bottom: 1em;
     }
 
@@ -107,6 +108,7 @@
       border: 1px solid #ddd;
       border-radius: 6px;
       padding: 10px 15px;
+      margin: 15px 0px;
     }
 
     .info-box h3 {
@@ -304,7 +306,7 @@
         <h3>Test: {{ test.test_name }}</h3>
         <p><strong>SQL File:</strong> {{ test.sql_file }}</p>
         <p><strong>TPS:</strong> <span class="highlighted">{{ test.tps }}</span></p>
-        <p><strong>Latency (ms):</strong> {{ test.latency_ms }}</p>
+        <p><strong>Avg Latency (ms):</strong> {{ test.latency_ms }}</p>
         <p><strong>Duration (s):</strong> {{ test.duration_seconds }}</p>
         <p><strong>Items Matched:</strong> {{ test.items_matched }}</p>
         <p><strong>Start Time UTC:</strong> {{ test.start_time_utc }}<br />
