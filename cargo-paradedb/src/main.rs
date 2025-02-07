@@ -141,7 +141,7 @@ fn main() -> Result<()> {
                             &format!(
                                 "SELECT report_data
                                  FROM {table}
-                                 WHERE git_hash = $1
+                                 WHERE git_hash LIKE ($1 || '%')
                                  ORDER BY created_at DESC
                                  LIMIT 1",
                                 table = report
