@@ -94,11 +94,7 @@ fn main() -> Result<()> {
                         db_url,
                         sql_folder,
                         clients: 1,
-                        transactions: 100,
-                        pgbench_extra_args: vec![
-                            "--log".to_string(),
-                            "--report-per-command".to_string(),
-                        ],
+                        transactions: 1,
                         skip_index,
                         maintenance_work_mem: "16GB".into(),
                         report_table: report,
@@ -109,7 +105,11 @@ fn main() -> Result<()> {
 
                     Ok(())
                 }
-                EsLogsCommand::ReportCiSuite { git_hash, url, report } => {
+                EsLogsCommand::ReportCiSuite {
+                    git_hash,
+                    url,
+                    report,
+                } => {
                     // Just call our new function in ci_report.rs
                     ci_report::report_ci_suite(&git_hash, &url, &report)
                 }
