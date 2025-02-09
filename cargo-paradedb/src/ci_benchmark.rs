@@ -217,7 +217,7 @@ pub struct PgBenchTestResult {
     pub tps: Option<f64>,
 
     /// “latency average” in ms from pgbench summary
-    pub latency_ms: Option<f64>,
+    pub avg_latency_ms: Option<f64>,
 
     pub db_size_before: Option<String>,
     pub db_size_after: Option<String>,
@@ -971,7 +971,7 @@ impl BenchmarkSuite {
             end_time_utc: Utc::now(),
             duration_seconds: duration.as_secs_f64(),
             tps,
-            latency_ms: avg_latency_ms,
+            avg_latency_ms,
             db_size_before,
             db_size_after,
             top_statements: if self.pg_stat_statements_available() {

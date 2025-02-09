@@ -94,7 +94,7 @@ fn main() -> Result<()> {
                         db_url,
                         sql_folder,
                         clients: 1,
-                        transactions: 1,
+                        transactions: 100,
                         skip_index,
                         maintenance_work_mem: "16GB".into(),
                         report_table: report,
