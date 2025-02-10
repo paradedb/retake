@@ -7,12 +7,12 @@ use sqlx::{Connection, PgConnection};
 use std::fs;
 use std::str::FromStr;
 
-pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<()> {
+pub fn report_ci_suite(rev: &str, url: &str, table: &str) -> Result<()> {
     // 1) Connect to the DB
     let conn_opts = PgConnectOptions::from_str(url)?;
     let mut conn = block_on(PgConnection::connect_with(&conn_opts))?;
 
-    // 2) Fetch the most recent JSON row with matching git_hash prefix
+    // 2) Fetch the most recent JSON row with matching revision prefix
     let row = block_on(
         sqlx::query_as::<_, (Option<Value>,)>(&format!(
             "SELECT report_data
@@ -20,14 +20,14 @@ pub fn report_ci_suite(git_hash: &str, url: &str, report_table: &str) -> Result<
                  WHERE git_hash LIKE ($1 || '%')
                  ORDER BY created_at DESC
                  LIMIT 1",
-            table = report_table
+            table = table
         ))
-        .bind(git_hash)
+        .bind(rev)
         .fetch_optional(&mut conn),
     )?;
 
     let Some((Some(json_report),)) = row else {
-        bail!("No row found with git_hash ~ '{}'", git_hash);
+        bail!("No row found with revision ~ '{}'", rev);
     };
 
     // 3) Load the HTML file manually, then add it to our environment

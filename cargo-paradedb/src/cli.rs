@@ -184,16 +184,16 @@ pub enum EsLogsCommand {
         #[arg(required = true)]
         sql_files: Vec<String>,
     },
-    #[clap(name = "report-ci-suite")]
+    #[clap(name = "report-ci-suite")] 
     ReportCiSuite {
-        /// The short git hash to query for
-        git_hash: String,
+        /// The short revision to query for
+        rev: String,
         /// The database connection URL
         #[arg(short, long, env = "DATABASE_URL")]
         url: String,
         /// The table that stores the final JSON
-        #[clap(long)]
-        report: String,
+        #[arg(long)]
+        table: String,
     },
 }
 /// The command to run on the hits corpus.

@@ -104,12 +104,12 @@ fn main() -> Result<()> {
                     Ok(())
                 }
                 EsLogsCommand::ReportCiSuite {
-                    git_hash,
+                    rev,
                     url,
-                    report,
+                    table,
                 } => {
                     // Just call our new function in ci_report.rs
-                    ci_report::report_ci_suite(&git_hash, &url, &report)
+                    ci_report::report_ci_suite(&rev, &url, &table)
                 }
             },
             Corpus::Hits(hits) => match hits.command {
