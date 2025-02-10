@@ -84,6 +84,7 @@ fn main() -> Result<()> {
                     url,
                     table,
                     index,
+                    txns,
                 } => {
                     let db_url = url;
                     let sql_files_paths = sql_files.iter().map(std::path::PathBuf::from).collect();
@@ -92,7 +93,7 @@ fn main() -> Result<()> {
                         db_url,
                         sql_files: sql_files_paths,
                         clients: 1,
-                        transactions: 100,
+                        transactions: txns.unwrap_or(100),
                         index,
                         maintenance_work_mem: "16GB".into(),
                         report_table: table,
@@ -103,11 +104,7 @@ fn main() -> Result<()> {
 
                     Ok(())
                 }
-                EsLogsCommand::ReportCiSuite {
-                    rev,
-                    url,
-                    table,
-                } => {
+                EsLogsCommand::ReportCiSuite { rev, url, table } => {
                     // Just call our new function in ci_report.rs
                     ci_report::report_ci_suite(&rev, &url, &table)
                 }

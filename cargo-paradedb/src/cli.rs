@@ -183,8 +183,10 @@ pub enum EsLogsCommand {
         table: String,
         #[arg(required = true)]
         sql_files: Vec<String>,
+        #[arg(long)]
+        txns: Option<u32>,
     },
-    #[clap(name = "report-ci-suite")] 
+    #[clap(name = "report-ci-suite")]
     ReportCiSuite {
         /// The short revision to query for
         rev: String,
