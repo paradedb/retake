@@ -177,10 +177,10 @@ pub enum EsLogsCommand {
     RunCiSuite {
         #[arg(short, long, env = "DATABASE_URL")]
         url: String,
-        #[clap(long)]
-        report: String,
-        #[clap(long)]
-        skip_index: bool,
+        #[arg(long, default_value_t = false)]
+        index: bool,
+        #[arg(long)]
+        table: String,
         #[arg(required = true)]
         sql_files: Vec<String>,
     },

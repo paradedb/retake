@@ -137,8 +137,8 @@ pub struct BenchmarkSuiteConfig {
     /// Number of transactions per client
     pub transactions: u32,
 
-    /// Whether to skip the custom index creation step
-    pub skip_index: bool,
+    /// Whether to build the custom index
+    pub index: bool,
 
     /// e.g. "16GB"
     pub maintenance_work_mem: String,
@@ -1008,7 +1008,7 @@ impl BenchmarkSuite {
         self.report.db_size_before = Some(initial_size);
 
         // optional index
-        if !self.config.skip_index {
+        if self.config.index {
             let idx_res = self.benchmark_index_creation().await?;
             self.report.index_creation_benchmark = Some(idx_res);
         }

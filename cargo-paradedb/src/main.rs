@@ -82,8 +82,8 @@ fn main() -> Result<()> {
                 EsLogsCommand::RunCiSuite {
                     sql_files,
                     url,
-                    report,
-                    skip_index,
+                    table,
+                    index,
                 } => {
                     let db_url = url;
                     let sql_files_paths = sql_files.iter().map(std::path::PathBuf::from).collect();
@@ -93,9 +93,9 @@ fn main() -> Result<()> {
                         sql_files: sql_files_paths,
                         clients: 1,
                         transactions: 100,
-                        skip_index,
+                        index,
                         maintenance_work_mem: "16GB".into(),
-                        report_table: report,
+                        report_table: table,
                     };
 
                     let mut suite = block_on(BenchmarkSuite::new(config))?;
