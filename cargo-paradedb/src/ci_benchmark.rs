@@ -1014,7 +1014,8 @@ impl BenchmarkSuite {
         }
 
         // run pgbench on each .sql file that was passed
-        for path in &self.config.sql_files {
+        let sql_files = self.config.sql_files.clone();
+        for path in sql_files {
             if path.extension().and_then(|ex| ex.to_str()) == Some("sql") {
                 println!(
                     "Running pgbench for SQL \"{}\" ({} txns, concurrency={}) ...",
@@ -1022,6 +1023,7 @@ impl BenchmarkSuite {
                     self.config.transactions,
                     self.config.clients
                 );
+                // pass a reference to the cloned `path`
                 let test_res = self.run_single_sql_pgbench(&path, "pgsearch").await?;
                 self.report.pgbench_tests.push(test_res);
             }
