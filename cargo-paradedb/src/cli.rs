@@ -175,14 +175,14 @@ pub enum EsLogsCommand {
         elastic_url: String,
     },
     RunCiSuite {
-        #[arg(short, long)]
-        sql: String,
         #[arg(short, long, env = "DATABASE_URL")]
         url: String,
         #[clap(long)]
         report: String,
         #[clap(long)]
         skip_index: bool,
+        #[arg(required = true)]
+        sql_files: Vec<String>,
     },
     #[clap(name = "report-ci-suite")]
     ReportCiSuite {

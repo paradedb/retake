@@ -7,8 +7,6 @@ mod elastic;
 mod subcommand;
 mod tables;
 
-use std::path::PathBuf;
-
 use anyhow::Result;
 use async_std::task::block_on;
 use ci_benchmark::BenchmarkSuite;
@@ -82,17 +80,17 @@ fn main() -> Result<()> {
                     term,
                 )),
                 EsLogsCommand::RunCiSuite {
-                    sql,
+                    sql_files,
                     url,
                     report,
                     skip_index,
                 } => {
                     let db_url = url;
-                    let sql_folder = PathBuf::from(sql.clone());
+                    let sql_files_paths = sql_files.iter().map(std::path::PathBuf::from).collect();
 
                     let config = ci_benchmark::BenchmarkSuiteConfig {
                         db_url,
-                        sql_folder,
+                        sql_files: sql_files_paths,
                         clients: 1,
                         transactions: 100,
                         skip_index,
