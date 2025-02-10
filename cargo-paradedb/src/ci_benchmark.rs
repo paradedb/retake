@@ -128,8 +128,8 @@ pub struct BenchmarkSuiteConfig {
     /// Postgres connection string, e.g. postgres://user@localhost/dbname
     pub db_url: String,
 
-    /// Folder containing the SQL files to test
-    pub sql_folder: PathBuf,
+    /// SQL files to test
+    pub sql_files: Vec<PathBuf>,
 
     /// Parallel clients (concurrency)
     pub clients: u32,
@@ -1013,17 +1013,8 @@ impl BenchmarkSuite {
             self.report.index_creation_benchmark = Some(idx_res);
         }
 
-        // run pgbench on each .sql in self.config.sql_folder
-        let entries = fs::read_dir(&self.config.sql_folder).with_context(|| {
-            format!(
-                "Could not read directory: {}",
-                self.config.sql_folder.display()
-            )
-        })?;
-
-        for entry in entries {
-            let e = entry?;
-            let path = e.path();
+        // run pgbench on each .sql file that was passed
+        for path in &self.config.sql_files {
             if path.extension().and_then(|ex| ex.to_str()) == Some("sql") {
                 println!(
                     "Running pgbench for SQL \"{}\" ({} txns, concurrency={}) ...",
