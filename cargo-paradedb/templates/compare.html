@@ -1169,7 +1169,11 @@
     </thead>
     <tbody>
       {% for test_name, left_test in pgbench_suite.tests|items %}
-      {% set right_test = rally_suite.tests.get(test_name) %}
+      {% if test_name in rally_suite.tests %}
+        {% set right_test = rally_suite.tests[test_name] %}
+      {% else %}
+        {% set right_test = None %}
+      {% endif %}
       <tr>
         <td><strong>{{ test_name }}</strong></td>
         <!-- Throughput cell with color-coded difference -->
