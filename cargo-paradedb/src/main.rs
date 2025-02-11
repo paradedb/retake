@@ -1,6 +1,7 @@
 mod bench_hits;
 mod benchmark;
 mod ci_benchmark;
+mod ci_json;
 mod ci_report;
 mod cli;
 mod elastic;
