@@ -465,8 +465,7 @@ mod integration_test {
         let row = sqlx::query("SELECT neon_results FROM public.neon_results LIMIT 1")
             .fetch_one(&pool)
             .await?;
-        let pgbench_json_str = row.try_get::<String, _>("neon_results")?;
-        let pgbench_data: Value = serde_json::from_str(&pgbench_json_str)?;
+        let pgbench_data = row.try_get::<Value, _>("neon_results")?;
         let pgbench_suite = BenchmarkSuite::from_pgbench_json(&pgbench_data);
         assert!(
             !pgbench_suite.tests.is_empty(),
@@ -477,8 +476,7 @@ mod integration_test {
         let row = sqlx::query("SELECT data FROM public.es_results LIMIT 1")
             .fetch_one(&pool)
             .await?;
-        let es_json_str = row.try_get::<String, _>("data")?;
-        let es_data: Value = serde_json::from_str(&es_json_str)?;
+        let es_data = row.try_get::<Value, _>("data")?;
         let rally_suite = BenchmarkSuite::from_rally_json(&es_data);
         assert!(
             !rally_suite.tests.is_empty(),
