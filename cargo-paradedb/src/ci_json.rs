@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(test.mean_throughput, Some(12795.4));
         assert_eq!(test.error_rate_percent, Some(0.0));
         assert_eq!(test.p50_latency_ms, Some(2.55485));
-        assert_eq!(test.p99_service_time_ms, None); // we only had a "99th percentile service time" = 1.19656
+        assert_eq!(test.p99_service_time_ms, Some(1.19656));
         assert_eq!(test.p99_latency_ms, Some(3.55275));
     }
 }
