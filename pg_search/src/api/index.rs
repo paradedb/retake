@@ -21,7 +21,7 @@ use pgrx::{iter::TableIterator, *};
 use crate::index::reader::index::SearchIndexReader;
 use crate::index::BlockDirectoryType;
 use crate::postgres::types::TantivyValue;
-use crate::query::{SearchQueryInput, TermInput};
+use crate::query::{NestedScoreMode, SearchQueryInput, TermInput};
 use crate::schema::AnyEnum;
 use crate::schema::IndexRecordOption;
 use serde::{Deserialize, Serialize};
@@ -336,6 +336,36 @@ pub fn more_like_this_id(
                 .0,
             )
         },
+    }
+}
+
+#[pg_extern(name = "nested", immutable, parallel_safe)]
+pub fn nested_with_string_path(
+    path: String,
+    query: SearchQueryInput,
+    score_mode: default!(Option<NestedScoreMode>, "NULL"),
+    ignore_unmapped: default!(bool, "false"),
+) -> SearchQueryInput {
+    nested(
+        path.split(".").map(|s| s.to_string()).collect(),
+        query,
+        score_mode,
+        ignore_unmapped,
+    )
+}
+
+#[pg_extern(name = "nested", immutable, parallel_safe)]
+pub fn nested(
+    path: Vec<String>,
+    query: SearchQueryInput,
+    score_mode: default!(Option<NestedScoreMode>, "NULL"),
+    ignore_unmapped: default!(bool, "false"),
+) -> SearchQueryInput {
+    SearchQueryInput::Nested {
+        path,
+        query: Box::new(query),
+        score_mode,
+        ignore_unmapped,
     }
 }
 

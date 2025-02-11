@@ -34,9 +34,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tantivy::collector::{Collector, TopDocs};
 use tantivy::index::{Index, SegmentId};
-use tantivy::query::{EnableScoring, QueryClone, QueryParser};
+use tantivy::query::{BooleanQuery, EnableScoring, QueryParser, TermQuery};
 use tantivy::schema::FieldType;
 use tantivy::termdict::TermOrdinal;
+use tantivy::Term;
 use tantivy::{
     query::Query, DocAddress, DocId, DocSet, IndexReader, Order, ReloadPolicy, Score, Searcher,
     SegmentOrdinal, SegmentReader, TantivyDocument,
@@ -322,8 +323,10 @@ impl SearchIndexReader {
                 .map(|search_field| search_field.id.0)
                 .collect::<Vec<_>>(),
         );
-        search_query_input
-            .clone()
+
+        // 1) Build the "base query" from the user's input
+        let inner_query = search_query_input
+            .clone() // because `into_tantivy_query` currently takes ownership
             .into_tantivy_query(
                 &(
                     unsafe { &PgRelation::with_lock(self.index_oid, pg_sys::AccessShareLock as _) },
@@ -332,7 +335,26 @@ impl SearchIndexReader {
                 &mut parser,
                 &self.searcher,
             )
-            .expect("must be able to parse query")
+            .expect("must be able to parse query");
+
+        if self.schema.has_nested() {
+            println!("WE GOT NESTED");
+            let is_parent_field = self
+                .schema
+                .schema
+                .get_field("_is_parent")
+                .expect("schema with nested fields must have internal 'is_parent' field");
+            let is_parent_term = Term::from_field_bool(is_parent_field, true);
+            let is_parent_query =
+                TermQuery::new(is_parent_term, tantivy::schema::IndexRecordOption::Basic);
+            Box::new(BooleanQuery::intersection(vec![
+                Box::new(is_parent_query),
+                inner_query.box_clone(),
+            ]))
+        } else {
+            println!("NO GOT NESTED");
+            inner_query
+        }
     }
 
     pub fn get_doc(&self, doc_address: DocAddress) -> tantivy::Result<TantivyDocument> {

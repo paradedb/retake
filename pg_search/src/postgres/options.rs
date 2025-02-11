@@ -381,6 +381,7 @@ impl SearchIndexCreateOptions {
                 record: IndexRecordOption::Basic,
                 normalizer: SearchNormalizer::Raw,
                 column: None,
+                nested: None,
             },
             SearchFieldType::Range => SearchFieldConfig::Range {
                 stored: true,

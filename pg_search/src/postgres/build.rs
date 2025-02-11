@@ -26,7 +26,8 @@ use crate::postgres::storage::block::{
 use crate::postgres::storage::buffer::BufferManager;
 use crate::postgres::storage::{LinkedBytesList, LinkedItemList};
 use crate::postgres::utils::{
-    categorize_fields, item_pointer_to_u64, row_to_search_document, CategorizedFieldData,
+    categorize_fields, item_pointer_to_u64, row_to_search_document, row_to_search_documents,
+    CategorizedFieldData,
 };
 use crate::schema::SearchField;
 use pgrx::*;
@@ -170,9 +171,36 @@ unsafe extern "C" fn build_callback(
     unsafe {
         build_state.memctx.reset();
         build_state.memctx.switch_to(|_| {
-            let mut search_document = writer.schema.new_document();
+        let mut search_document = writer.schema.new_document();
 
-            row_to_search_document(values, isnull, key_field_name, categorized_fields, &mut search_document).unwrap_or_else(|err| {
+        if writer.schema.has_nested() {
+            let child_docs = row_to_search_documents(
+                values,
+                isnull,
+                key_field_name,
+                categorized_fields,
+                &mut search_document,
+                &writer.schema,
+            )
+            .unwrap_or_else(|err| {
+                panic!(
+                    "error creating nested index entries for index '{}': {err}",
+                    CStr::from_ptr((*(*indexrel).rd_rel).relname.data.as_ptr())
+                        .to_string_lossy()
+                );
+            });
+            writer
+                .insert_as_block(child_docs, search_document, item_pointer_to_u64(*ctid))
+                .expect("insertion into index should succeed");
+        } else {
+            row_to_search_document(
+                values,
+                isnull,
+                key_field_name,
+                categorized_fields,
+                &mut search_document,
+            )
+            .unwrap_or_else(|err| {
                 panic!(
                     "error creating index entries for index '{}': {err}",
                     CStr::from_ptr((*(*indexrel).rd_rel).relname.data.as_ptr())
@@ -184,6 +212,7 @@ unsafe extern "C" fn build_callback(
                 .unwrap_or_else(|err| {
                     panic!("error inserting document during build callback.  See Postgres log for more information: {err:?}")
                 });
+            }
         });
         build_state.memctx.reset();
 

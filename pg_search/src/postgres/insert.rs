@@ -25,6 +25,8 @@ use pgrx::{pg_guard, pg_sys, PgRelation, PgTupleDesc};
 use std::ffi::CStr;
 use std::panic::{catch_unwind, resume_unwind};
 
+use super::utils::row_to_search_documents;
+
 extern "C" {
     fn IsLogicalWorker() -> bool;
 }
@@ -159,22 +161,44 @@ unsafe fn aminsert_internal(
 
         let mut search_document = writer.schema.new_document();
 
-        row_to_search_document(
-            values,
-            isnull,
-            key_field_name,
-            categorized_fields,
-            &mut search_document,
-        )
-        .unwrap_or_else(|err| {
-            panic!(
-                "error creating index entries for index '{}': {err}",
-                CStr::from_ptr((*(*index_relation).rd_rel).relname.data.as_ptr()).to_string_lossy()
-            );
-        });
-        writer
-            .insert(search_document, item_pointer_to_u64(*ctid))
-            .expect("insertion into index should succeed");
+        if writer.schema.has_nested() {
+            let child_docs = row_to_search_documents(
+                values,
+                isnull,
+                key_field_name,
+                categorized_fields,
+                &mut search_document,
+                &writer.schema,
+            )
+            .unwrap_or_else(|err| {
+                panic!(
+                    "error creating nested index entries for index '{}': {err}",
+                    CStr::from_ptr((*(*index_relation).rd_rel).relname.data.as_ptr())
+                        .to_string_lossy()
+                );
+            });
+            writer
+                .insert_as_block(child_docs, search_document, item_pointer_to_u64(*ctid))
+                .expect("insertion into index should succeed");
+        } else {
+            row_to_search_document(
+                values,
+                isnull,
+                key_field_name,
+                categorized_fields,
+                &mut search_document,
+            )
+            .unwrap_or_else(|err| {
+                panic!(
+                    "error creating index entries for index '{}': {err}",
+                    CStr::from_ptr((*(*index_relation).rd_rel).relname.data.as_ptr())
+                        .to_string_lossy()
+                );
+            });
+            writer
+                .insert(search_document, item_pointer_to_u64(*ctid))
+                .expect("insertion into index should succeed");
+        }
         true
     });
 

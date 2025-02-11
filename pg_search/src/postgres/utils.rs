@@ -101,7 +101,7 @@ pub fn categorize_fields(
         // List any indexed fields that use this column as source data.
         let mut search_fields = alias_lookup.remove(&attname).unwrap_or_default();
 
-        // If there's an indexed field with the same name as a this column, add it to the list.
+        // If there's an indexed field with the same name as this column, add it to the list.
         if let Some(index_field) = schema.get_search_field(&attname.clone().into()) {
             search_fields.push(index_field)
         };
@@ -178,6 +178,61 @@ pub unsafe fn row_to_search_document(
         }
     }
     Ok(())
+}
+
+pub unsafe fn row_to_search_documents(
+    values: *mut pg_sys::Datum,
+    isnull: *mut bool,
+    key_field_name: &str,
+    categorized_fields: &Vec<(SearchField, CategorizedFieldData)>,
+    document: &mut SearchDocument,
+    schema: &SearchIndexSchema,
+) -> Result<Vec<SearchDocument>, IndexError> {
+    let mut child_docs = vec![];
+    for (
+        search_field,
+        CategorizedFieldData {
+            attno,
+            base_oid,
+            is_array,
+            is_json,
+        },
+    ) in categorized_fields
+    {
+        let datum = *values.add(*attno);
+        let isnull = *isnull.add(*attno);
+
+        if key_field_name == search_field.name.as_ref() && isnull {
+            return Err(IndexError::KeyIdNull(key_field_name.to_string()));
+        }
+
+        if isnull {
+            continue;
+        }
+
+        if *is_array {
+            for value in TantivyValue::try_from_datum_array(datum, *base_oid)? {
+                document.insert(search_field.id, value.tantivy_schema_value());
+            }
+        } else if *is_json {
+            let is_nested = search_field.config.is_nested();
+            for value in TantivyValue::try_from_datum_json(datum, *base_oid)? {
+                if is_nested {
+                    let children =
+                        document.insert_nested(schema, search_field, value.tantivy_schema_value());
+                    child_docs.extend(children.into_iter());
+                } else {
+                    document.insert(search_field.id, value.tantivy_schema_value());
+                }
+            }
+        } else {
+            document.insert(
+                search_field.id,
+                TantivyValue::try_from_datum(datum, *base_oid)?.tantivy_schema_value(),
+            );
+        }
+    }
+    Ok(child_docs)
 }
 
 /// Utility function for easy `f64` to `u32` conversion

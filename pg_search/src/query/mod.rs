@@ -22,10 +22,11 @@ use crate::query::range::{Comparison, RangeField};
 use crate::schema::IndexRecordOption;
 use anyhow::Result;
 use core::panic;
-use pgrx::{pg_sys, PgBuiltInOids, PgOid, PostgresType};
+use pgrx::{pg_sys, FromDatum, PgBuiltInOids, PgOid, PostgresEnum, PostgresType};
 use range::{deserialize_bound, serialize_bound};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, ops::Bound};
+use tantivy::query::{NestedQuery, ScoreMode};
 use tantivy::DateTime;
 use tantivy::{
     collector::DocSetCollector,
@@ -145,6 +146,19 @@ pub enum SearchQueryInput {
         stop_words: Option<Vec<String>>,
         document_fields: Option<Vec<(String, tantivy::schema::OwnedValue)>>,
         document_id: Option<tantivy::schema::OwnedValue>,
+    },
+    Nested {
+        /// The dot-notated path that identifies children
+        path: Vec<String>,
+        /// The query that should match on child docs
+        query: Box<SearchQueryInput>,
+        /// Aggregate child doc scores into the parent doc
+        /// e.g. "avg", "sum", "max", "none" (defaults to "avg")
+        score_mode: Option<NestedScoreMode>,
+        /// If true, do not error if this path is not mapped
+        /// in the schema. Just return no results instead.
+        #[serde(default)]
+        ignore_unmapped: bool,
     },
     Parse {
         query_string: String,
@@ -954,6 +968,19 @@ impl SearchQueryInput {
                     query.set_max_expansions(max_expansions)
                 }
                 Ok(Box::new(query))
+            }
+            Self::Nested {
+                query,
+                score_mode,
+                path,
+                ignore_unmapped,
+            } => {
+                let child_query = query.into_tantivy_query(field_lookup, parser, searcher)?;
+                let actual_score_mode = score_mode.unwrap_or_default().into();
+                let nested_query =
+                    NestedQuery::new(path, child_query, actual_score_mode, ignore_unmapped);
+
+                Ok(Box::new(nested_query))
             }
             Self::Parse {
                 query_string,
@@ -1901,6 +1928,26 @@ pub fn split_field_and_path(field: &str) -> (String, Option<String>) {
         (field.to_string(), None)
     } else {
         (json_path[0].clone(), Some(json_path[1..].join(".")))
+    }
+}
+
+#[derive(Debug, PostgresEnum, Deserialize, Serialize, Clone, PartialEq, Default)]
+pub enum NestedScoreMode {
+    #[default]
+    Avg,
+    Max,
+    Total,
+    None,
+}
+
+impl From<NestedScoreMode> for ScoreMode {
+    fn from(mode: NestedScoreMode) -> Self {
+        match mode {
+            NestedScoreMode::Avg => Self::Avg,
+            NestedScoreMode::Max => Self::Max,
+            NestedScoreMode::Total => Self::Total,
+            NestedScoreMode::None => Self::None,
+        }
     }
 }
 

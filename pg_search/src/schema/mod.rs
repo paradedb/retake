@@ -145,6 +145,8 @@ pub enum SearchFieldConfig {
         normalizer: SearchNormalizer,
         #[serde(default)]
         column: Option<String>,
+        #[serde(default)]
+        nested: Option<serde_json::Value>,
     },
     Range {
         #[serde(default = "default_as_false")]
@@ -316,6 +318,11 @@ impl SearchFieldConfig {
             None => Ok(None),
         }?;
 
+        let nested = match obj.get("nested") {
+            Some(v) => serde_json::from_value(v.clone()),
+            None => Ok(None),
+        }?;
+
         Ok(SearchFieldConfig::Json {
             indexed,
             fast,
@@ -326,6 +333,7 @@ impl SearchFieldConfig {
             record,
             normalizer,
             column,
+            nested,
         })
     }
 
@@ -488,6 +496,13 @@ impl SearchFieldConfig {
             | Self::Date { column, .. } => column.as_ref(),
         }
     }
+
+    pub fn is_nested(&self) -> bool {
+        match self {
+            SearchFieldConfig::Json { nested, .. } => nested.is_some(),
+            _ => false,
+        }
+    }
 }
 
 impl SearchFieldConfig {
@@ -597,6 +612,7 @@ impl From<SearchFieldConfig> for JsonObjectOptions {
                 tokenizer,
                 record,
                 normalizer,
+                nested,
                 ..
             } => {
                 if stored {
@@ -613,8 +629,12 @@ impl From<SearchFieldConfig> for JsonObjectOptions {
                         .set_index_option(record.into())
                         .set_fieldnorms(fieldnorms)
                         .set_tokenizer(&tokenizer.name());
-
                     json_options = json_options.set_indexing_options(text_field_indexing);
+                }
+                if let Some(nested_opts) = nested {
+                    json_options = json_options.set_nested();
+                    json_options =
+                        add_subfields_from_json(json_options, &json!({"nested": nested_opts}));
                 }
             }
             SearchFieldConfig::Range { stored, .. } => {
@@ -633,6 +653,37 @@ impl From<SearchFieldConfig> for JsonObjectOptions {
 
         json_options
     }
+}
+
+pub fn add_subfields_from_json(
+    mut opts: JsonObjectOptions,
+    json: &serde_json::Value,
+) -> JsonObjectOptions {
+    // Work only if the provided JSON value is an object.
+    if let serde_json::Value::Object(map) = json {
+        // If the object is wrapped in a "nested" key, use that as the mapping.
+        let subfields = if let Some(serde_json::Value::Object(nested_map)) = map.get("nested") {
+            nested_map
+        } else {
+            map
+        };
+
+        // Process each subfield.
+        for (field, sub_val) in subfields {
+            // Start with a nested mapping for the field.
+            let mut field_opts = JsonObjectOptions::nested();
+            // If the JSON for this subfield is an object and not empty,
+            // then add subfields recursively.
+            if let serde_json::Value::Object(inner_map) = sub_val {
+                if !inner_map.is_empty() {
+                    field_opts = add_subfields_from_json(field_opts, sub_val);
+                }
+            }
+            // Consume opts and add the new subfield.
+            opts = opts.add_subfield(field.clone(), field_opts);
+        }
+    }
+    opts
 }
 
 impl From<SearchFieldConfig> for DateOptions {
@@ -696,6 +747,8 @@ pub struct SearchIndexSchema {
     /// A lookup cache for retrieving search fields.
     #[serde(skip_serializing)]
     pub lookup: Option<HashMap<SearchFieldName, usize>>,
+    /// Whether there are nested JSON fields on this schema.
+    pub has_nested: bool,
 }
 
 impl SearchIndexSchema {
@@ -713,7 +766,13 @@ impl SearchIndexSchema {
                 SearchFieldType::U64 => builder.add_u64_field(name.as_ref(), config.clone()),
                 SearchFieldType::F64 => builder.add_f64_field(name.as_ref(), config.clone()),
                 SearchFieldType::Bool => builder.add_bool_field(name.as_ref(), config.clone()),
-                SearchFieldType::Json => builder.add_json_field(name.as_ref(), config.clone()),
+                SearchFieldType::Json => {
+                    if config.is_nested() {
+                        builder.add_nested_json_field(name.as_ref(), config.clone())
+                    } else {
+                        builder.add_json_field(name.as_ref(), config.clone())
+                    }
+                }
                 SearchFieldType::Range => builder.add_json_field(name.as_ref(), config.clone()),
                 SearchFieldType::Date => builder.add_date_field(name.as_ref(), config.clone()),
             }
@@ -727,11 +786,14 @@ impl SearchIndexSchema {
             });
         }
 
+        let has_nested = Self::has_nested_static(&search_fields);
+
         Ok(Self {
             key: key_index,
             schema: builder.build(),
             lookup: Self::build_lookup(&search_fields).into(),
             fields: search_fields,
+            has_nested,
         })
     }
 
@@ -750,11 +812,13 @@ impl SearchIndexSchema {
             })
             .collect::<Vec<_>>();
 
+        let has_nested = Self::has_nested_static(&search_fields);
         Self {
             key: key_index,
             schema,
             lookup: Self::build_lookup(&search_fields).into(),
             fields: search_fields,
+            has_nested,
         }
     }
 
@@ -779,6 +843,20 @@ impl SearchIndexSchema {
 
     pub fn is_key_field(&self, name: &str) -> bool {
         self.key_field().name.0 == name
+    }
+
+    fn has_nested_static(search_fields: &[SearchField]) -> bool {
+        let mut has_nested = false;
+        for search_field in search_fields {
+            if search_field.config.is_nested() {
+                has_nested = true;
+            }
+        }
+        has_nested
+    }
+
+    pub fn has_nested(&self) -> bool {
+        self.schema.has_nested()
     }
 
     #[inline(always)]

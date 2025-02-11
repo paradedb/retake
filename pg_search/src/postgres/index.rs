@@ -136,6 +136,7 @@ pub unsafe fn get_fields(index_relation: &PgRelation) -> (Fields, KeyFieldIndex)
             record: IndexRecordOption::Basic,
             normalizer: SearchNormalizer::Raw,
             column: None,
+            nested: None,
         },
         SearchFieldType::Range => SearchFieldConfig::Range {
             stored: false,

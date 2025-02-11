@@ -238,6 +238,7 @@ pub unsafe fn index_fields(index: PgRelation) -> JsonB {
             normalizer: SearchNormalizer::Raw,
             fieldnorms: true,
             column: None,
+            nested: None,
         },
         SearchFieldType::Range => SearchFieldConfig::Range {
             stored: false,
