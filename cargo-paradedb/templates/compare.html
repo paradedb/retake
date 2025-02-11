@@ -1,11 +1,9 @@
-{% set short_hash = report.extension_sha[:7] %}
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="utf-8" />
-  <title>ParadeDB CI Report - {{ short_hash }}</title>
+  <title>ParadeDB CI Report</title>
   <!-- Inlined stylesheet from: -->
   <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/hack/0.8.1/hack.css" /> -->
   <style>
@@ -1086,3 +1084,138 @@
     }
   </style>
 </head>
+
+{% block content %}
+
+<h1>Benchmark Comparison Report</h1>
+
+<!-- Show suite-level metadata first. -->
+<section>
+  <h2>Suite-level Info</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>pgBench</th>
+        <th>Rally</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Extension Version</td>
+        <td>{{ pgbench_suite.suite_metadata.extension_version or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.extension_version or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Build Mode</td>
+        <td>{{ pgbench_suite.suite_metadata.extension_build_mode or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.extension_build_mode or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>DB Size Before</td>
+        <td>{{ pgbench_suite.suite_metadata.db_size_before or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.db_size_before or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>DB Size After</td>
+        <td>{{ pgbench_suite.suite_metadata.db_size_after or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.db_size_after or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Started At</td>
+        <td>{{ pgbench_suite.suite_metadata.suite_started_at or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.suite_started_at or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Finished At</td>
+        <td>{{ pgbench_suite.suite_metadata.suite_finished_at or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.suite_finished_at or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Store Size (GB)</td>
+        <td>{{ pgbench_suite.suite_metadata.store_size_gb or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.store_size_gb or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Dataset Size (GB)</td>
+        <td>{{ pgbench_suite.suite_metadata.dataset_size_gb or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.dataset_size_gb or "N/A" }}</td>
+      </tr>
+      <tr>
+        <td>Segment Count</td>
+        <td>{{ pgbench_suite.suite_metadata.segment_count or "N/A" }}</td>
+        <td>{{ rally_suite.suite_metadata.segment_count or "N/A" }}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Tests Comparison</h2>
+  <!-- 
+     For each test in both suites, we'll show a row comparing 
+     throughput, latencies, etc. If you want a more robust matching 
+     approach, you can compare test.name, or show them all.
+  -->
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Test Name</th>
+        <th>TPS / Mean Throughput (pgBench vs Rally)</th>
+        <th>p99 Latency (ms) (pgBench vs Rally)</th>
+        <th>Items Matched / Doc Count</th>
+        <th>Error Rate (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for test_name, left_test in pgbench_suite.tests.items() %}
+      {% set right_test = rally_suite.tests.get(test_name) %}
+      <tr>
+        <td><strong>{{ test_name }}</strong></td>
+        <!-- Throughput cell with color-coded difference -->
+        <td>
+          <span style="
+                background-color: 
+                  {% if left_test.tps and right_test and right_test.tps %}
+                    {% if left_test.tps > right_test.tps %}lightgreen{% else %}lightcoral{% endif %}
+                  {% else %}transparent{% endif %};
+              ">
+            {{ left_test.tps|default("N/A") }} vs
+            {{ right_test.tps|default("N/A") }}
+          </span>
+        </td>
+        <!-- p99 latency cell -->
+        <td>
+          {% set p99_pg = left_test.p99_latency_ms %}
+          {% set p99_es = right_test.p99_latency_ms if right_test else None %}
+          <span style="
+                background-color: 
+                  {% if p99_pg and p99_es %}
+                    {% if p99_pg < p99_es %}lightgreen{% else %}lightcoral{% endif %}
+                  {% else %}transparent{% endif %};
+              ">
+            {{ p99_pg|default("N/A") }} ms vs
+            {{ p99_es|default("N/A") }} ms
+          </span>
+        </td>
+        <!-- Items matched / doc count -->
+        <td>
+          {{ left_test.items_matched|default("N/A") }} vs
+          {% if right_test %}{{ right_test.doc_count|default("N/A") }}{% else %}N/A{% endif %}
+        </td>
+        <!-- Error rate -->
+        <td>
+          {{ left_test.error_rate_percent|default("N/A") }} vs
+          {% if right_test %}
+          {{ right_test.error_rate_percent|default("N/A") }}
+          {% else %}
+          N/A
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}
