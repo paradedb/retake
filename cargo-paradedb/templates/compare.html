@@ -1168,7 +1168,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for test_name, left_test in pgbench_suite.tests.items() %}
+      {% for test_name, left_test in dictitems(pgbench_suite.tests) %}
       {% set right_test = rally_suite.tests.get(test_name) %}
       <tr>
         <td><strong>{{ test_name }}</strong></td>
