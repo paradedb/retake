@@ -443,3 +443,48 @@ mod tests {
         assert_eq!(test.p99_latency_ms, Some(3.55275));
     }
 }
+
+#[cfg(test)]
+mod integration_test {
+    use super::*;
+    use async_std::test as async_test;
+    use sqlx::{PgPool, Row};
+    use anyhow::Result;
+    use serde_json::Value;
+
+    /// This test connects to a local Postgres instance at the hardcoded URL,
+    /// fetches JSON from two tables, and verifies that `from_pgbench_json`
+    /// and `from_rally_json` can parse them into `BenchmarkSuite`.
+    #[async_test]
+    async fn e2e_fetch_and_parse() -> Result<()> {
+        // Hardcoded URL (replace if needed)
+        let db_url = "postgres://neilhansen@localhost:28817/postgres";
+        let pool = PgPool::connect(db_url).await?;
+
+        // 1) Fetch pgBench JSON from public.neon_results
+        let row = sqlx::query("SELECT neon_results FROM public.neon_results LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+        let pgbench_json_str = row.try_get::<String, _>("neon_results")?;
+        let pgbench_data: Value = serde_json::from_str(&pgbench_json_str)?;
+        let pgbench_suite = BenchmarkSuite::from_pgbench_json(&pgbench_data);
+        assert!(
+            !pgbench_suite.tests.is_empty(),
+            "pgBench suite should have tests"
+        );
+
+        // 2) Fetch Rally JSON from public.es_results
+        let row = sqlx::query("SELECT data FROM public.es_results LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+        let es_json_str = row.try_get::<String, _>("data")?;
+        let es_data: Value = serde_json::from_str(&es_json_str)?;
+        let rally_suite = BenchmarkSuite::from_rally_json(&es_data);
+        assert!(
+            !rally_suite.tests.is_empty(),
+            "Rally suite should have tests"
+        );
+
+        Ok(())
+    }
+}
