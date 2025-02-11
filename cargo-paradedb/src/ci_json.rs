@@ -337,7 +337,7 @@ impl BenchmarkSuite {
 /// `"Min Throughput": { "value": 9305.62, "Unit": "docs/s" }`
 /// or simply `"Min Throughput": 9305.62` in the Rally metrics map,
 /// returning it as f64 if available.
-fn get_rally_metric_as_f64(metrics_map: &HashMap<String, Value>, key: &str) -> Option<f64> {
+fn get_rally_metric_as_f64(metrics_map: &serde_json::Map<String, Value>, key: &str) -> Option<f64> {
     if let Some(val) = metrics_map.get(key) {
         // Sometimes it's directly a number
         if let Some(num) = val.as_f64() {
