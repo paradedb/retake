@@ -109,9 +109,9 @@ fn main() -> Result<()> {
                     // Just call our new function in ci_report.rs
                     ci_report::report_ci_suite(&rev, &url, &table)
                 }
-                EsLogsCommand::CompareCiSuites { rev1, rev2, url, table, out } => {
+                EsLogsCommand::CompareCiSuites { url } => {
                     // Our newly added command:
-                    ci_report::compare_ci_suites(&rev1, &rev2, &url, &table, &out)
+                    ci_report::compare_ci_suites(&url)
                 }
             },
             Corpus::Hits(hits) => match hits.command {

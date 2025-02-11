@@ -53,7 +53,7 @@ pub fn report_ci_suite(rev: &str, url: &str, table: &str) -> Result<()> {
 }
 
 /// Compare two JSON results (by revision) side-by-side in `compare.html`.
-pub fn compare_ci_suites(_rev1: &str, _rev2: &str, url: &str, _table: &str, out_file: &str) -> Result<()> {
+pub fn compare_ci_suites(url: &str) -> Result<()> {
     // Connect to the DB
     let conn_opts = PgConnectOptions::from_str(url)?;
     let mut conn = block_on(PgConnection::connect_with(&conn_opts))?;
@@ -95,8 +95,7 @@ pub fn compare_ci_suites(_rev1: &str, _rev2: &str, url: &str, _table: &str, out_
         rally_suite   => suite2
     })?;
 
-    // Write to output file
-    fs::write(out_file, rendered)?;
-    println!("Wrote comparison report to {out_file}");
+    // Print to stdout
+    println!("{}", rendered);
     Ok(())
 }

@@ -201,19 +201,9 @@ pub enum EsLogsCommand {
     /// Compare two stored JSON rows (by revision) and render them side-by-side
     /// to compare performance in `compare.html`.
     CompareCiSuites {
-        /// The first revision to query
-        rev1: String,
-        /// The second revision to query
-        rev2: String,
-        /// The database connection URL
-        #[arg(short, long, env = "DATABASE_URL")]
+        /// The database connection URL (optional; defaults to local dev DB)
+        #[arg(short, long, env = "DATABASE_URL", default_value = "postgres://neilhansen@localhost:28817/postgres")]
         url: String,
-        /// The table that stores the final JSON
-        #[arg(long)]
-        table: String,
-        /// The output file name (html)
-        #[arg(long, default_value = "compare_out.html")]
-        out: String,
     },
 }
 /// The command to run on the hits corpus.
