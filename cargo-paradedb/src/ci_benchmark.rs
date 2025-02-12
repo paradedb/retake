@@ -470,10 +470,17 @@ impl BenchmarkSuite {
     }
 
     async fn reset_pg_stat_statements(&mut self) -> Result<()> {
+        // We run this in a DO block so that it doesn't return a row,
+        // which messes up our "matched_items" count.
         if self.pg_stat_statements_available() {
-            sqlx::query("SELECT pg_stat_statements_reset()")
-                .execute(self.conn_mut()?)
-                .await?;
+            sqlx::query(
+                r#"DO $$
+                    BEGIN
+                        PERFORM pg_stat_statements_reset();
+                    END$$;"#,
+            )
+            .execute(self.conn_mut()?)
+            .await?;
         }
         Ok(())
     }
@@ -925,6 +932,12 @@ impl BenchmarkSuite {
                 stderr_str
             );
         }
+
+        // Very important to run this directly after the pgbench call, otherwise
+        // any other metadata-gathering calls to the database will be factored in
+        // to the total match count.
+        let items_matched = self.fetch_total_items_matched_sync().unwrap_or(None);
+
         let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
 
         let intervals = Self::parse_aggregate_intervals(&stdout_str);
@@ -951,8 +964,7 @@ impl BenchmarkSuite {
             }
         }
 
-        // let db_size_after = self.fetch_db_size().await.ok();
-        let db_size_after = None;
+        let db_size_after = self.fetch_db_size().await.ok();
         let duration = start_instant.elapsed();
 
         // overall stats
@@ -962,8 +974,6 @@ impl BenchmarkSuite {
         // per-statement stats
         let statement_latency_details =
             Self::group_and_compute_per_statement_stats_us(&transaction_log);
-
-        let items_matched = self.fetch_total_items_matched_sync().unwrap_or(None);
 
         Ok(PgBenchTestResult {
             test_name: test_name.to_string(),
