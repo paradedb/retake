@@ -447,10 +447,10 @@ mod tests {
 #[cfg(test)]
 mod integration_test {
     use super::*;
-    use async_std::test as async_test;
-    use sqlx::{PgPool, Row};
     use anyhow::Result;
+    use async_std::test as async_test;
     use serde_json::Value;
+    use sqlx::PgPool;
 
     /// This test connects to a local Postgres instance at the hardcoded URL,
     /// fetches JSON from two tables, and verifies that `from_pgbench_json`
@@ -462,10 +462,10 @@ mod integration_test {
         let pool = PgPool::connect(db_url).await?;
 
         // 1) Fetch pgBench JSON from public.neon_results
-        let row = sqlx::query("SELECT neon_results FROM public.neon_results LIMIT 1")
-            .fetch_one(&pool)
-            .await?;
-        let pgbench_data = row.try_get::<Value, _>("neon_results")?;
+        let (pgbench_data,) =
+            sqlx::query_as::<_, (Value,)>("SELECT report_data FROM public.neon_results LIMIT 1")
+                .fetch_one(&pool)
+                .await?;
         let pgbench_suite = BenchmarkSuite::from_pgbench_json(&pgbench_data);
         assert!(
             !pgbench_suite.tests.is_empty(),
@@ -473,10 +473,10 @@ mod integration_test {
         );
 
         // 2) Fetch Rally JSON from public.es_results
-        let row = sqlx::query("SELECT data FROM public.es_results LIMIT 1")
-            .fetch_one(&pool)
-            .await?;
-        let es_data = row.try_get::<Value, _>("data")?;
+        let (es_data,) =
+            sqlx::query_as::<_, (Value,)>("SELECT report_data FROM public.es_results LIMIT 1")
+                .fetch_one(&pool)
+                .await?;
         let rally_suite = BenchmarkSuite::from_rally_json(&es_data);
         assert!(
             !rally_suite.tests.is_empty(),

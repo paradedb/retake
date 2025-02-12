@@ -951,7 +951,8 @@ impl BenchmarkSuite {
             }
         }
 
-        let db_size_after = self.fetch_db_size().await.ok();
+        // let db_size_after = self.fetch_db_size().await.ok();
+        let db_size_after = None;
         let duration = start_instant.elapsed();
 
         // overall stats
@@ -973,6 +974,7 @@ impl BenchmarkSuite {
             tps,
             avg_latency_ms,
             db_size_before,
+            //     db_size_after,
             db_size_after,
             top_statements: if self.pg_stat_statements_available() {
                 self.fetch_top_statements_sync().unwrap_or_default()

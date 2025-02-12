@@ -7,7 +7,7 @@ edition = { workspace = true }
 
 [dependencies]
 anyhow = "1.0.87"
-async-std = "1.13.0"
+async-std = { version = "1.13.0", features = ["attributes"] }
 chrono = { version = "0.4.38", features = ["clock", "alloc", "serde"] }
 clap = { version = "4.5.17", features = ["derive", "env"] }
 cmd_lib = "1.9.4"
