@@ -55,20 +55,34 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
 
-      # On any branch other than `main`, we build the ParadeDB Docker Image using Docker Compose so that community
-      # contributors can trigger the workflow without needing access to GitHub Secrets.
-      #
-      # In this environment, PARADEDB_TELEMETRY is set to false to avoid sending misleading telemetry data to PostHog.
-      - name: Build the ParadeDB Docker Image via Docker Compose (dev only)
+      - name: Build the ParadeDB Docker Image via Docker Compose
+        working-directory: docker/
+        run: docker compose -f docker-compose.dev.yml build
+
+      # On PRs to `dev`, we start the ParadeDB Docker image using Docker Compose to test the
+      # compose file. The docker-compose.yml file will use the local ParadeDB image that we
+      # just built since we tagged it with `latest` in docker-compose.dev.yml.
+      - name: Start the ParadeDB Docker Image via Docker Compose (dev only)
         if: steps.env.outputs.environment == 'dev'
         working-directory: docker/
-        run: docker build --file Dockerfile --tag paradedb/paradedb:latest ..
+        run: PARADEDB_TELEMETRY=false docker compose -f docker-compose.yml up -d && sleep 10
 
-      # Sleep 10 seconds to give time for Postgres to start inside the container. The docker-compose.yml file
-      # will use the local ParadeDB image that we just built.
-      - name: Start the ParadeDB Docker Image
+      # On PRs to `main`, we start the ParadeDB Docker image using `docker run` to test the
+      # standalone Docker image. We add a --tmpfs mount as a test of compatibility with the
+      # upstream `postgres` image. The `docker run` command will use the local ParadeDB image
+      # that we just built since we tagged it with `latest` in docker-compose.dev.yml.
+      - name: Start the ParadeDB Docker Image via Docker Run (prod only)
+        if: steps.env.outputs.environment == 'prod'
         working-directory: docker/
-        run: docker compose -f docker-compose.yml up -d && sleep 10
+        run: |
+          docker run -d \
+            --name paradedb \
+            -e POSTGRES_USER=myuser \
+            -e POSTGRES_PASSWORD=mypassword \
+            -e POSTGRES_DB=mydatabase \
+            -p 5432:5432 \
+            --tmpfs /tmp \
+            paradedb/paradedb:latest
 
       # We run the container in detached mode, and grep for the word ERROR to see if it failed to start correctly
       - name: Check for Errors in the ParadeDB Docker Image

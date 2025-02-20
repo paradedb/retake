@@ -14,6 +14,7 @@ services:
       cache_to:
         - type=local,dest=./.docker_cache_dev
     container_name: paradedb-dev
+    image: paradedb/paradedb:latest # Tag the image with `latest` to make it run in the `docker-compose.yml` file
     environment:
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
