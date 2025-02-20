@@ -545,6 +545,124 @@ datetime_range_fn!(range_date, pgrx::datum::Date);
 datetime_range_fn!(range_timestamp, pgrx::datum::Timestamp);
 datetime_range_fn!(range_timestamptz, pgrx::datum::TimestampWithTimeZone);
 
+#[rustfmt::skip]
+#[pg_extern(immutable, parallel_safe)]
+pub unsafe fn term_with_operator(
+    field: FieldName,
+    operator: String,
+    value: AnyElement,
+) -> anyhow::Result<SearchQueryInput> {
+    macro_rules! make_query {
+        ($operator:expr, $field:expr, $eq_func_name:ident, $value_type:ty, $anyelement:expr, $is_datetime:literal) => {
+            match $operator.as_str() {
+                "=" => Ok($eq_func_name(Some($field), <$value_type>::from_datum($anyelement.datum(), false))),
+                "<>" => Ok(
+                    SearchQueryInput::Boolean {
+                        must: vec![SearchQueryInput::All],
+                        should: vec![],
+                        must_not: vec![$eq_func_name(Some($field), <$value_type>::from_datum($anyelement.datum(), false))]
+                    }
+                ),
+                ">" => generic_range_query($field, Bound::Excluded($anyelement), Bound::Unbounded, $is_datetime),
+                ">=" => generic_range_query($field, Bound::Included($anyelement), Bound::Unbounded, $is_datetime),
+                "<" => generic_range_query($field, Bound::Unbounded, Bound::Excluded($anyelement), $is_datetime),
+                "<=" => generic_range_query($field, Bound::Unbounded, Bound::Included($anyelement), $is_datetime),
+                other => panic!("unsupported operator: {other}"),
+            }
+        };
+    }
+
+    match value.oid() {
+        pg_sys::CHAROID => make_query!(operator, field, term_i8, i8, value, false),
+        pg_sys::INT2OID => make_query!(operator, field, term_i16, i16, value, false),
+        pg_sys::INT4OID => make_query!(operator, field, term_i32, i32, value, false),
+        pg_sys::INT8OID => make_query!(operator, field, term_i64, i64, value, false),
+        pg_sys::FLOAT4OID => make_query!(operator, field, term_f32, f32, value, false),
+        pg_sys::FLOAT8OID => make_query!(operator, field, term_f64, f64, value, false),
+        pg_sys::BOOLOID => make_query!(operator, field, term_bool, bool, value, false),
+        pg_sys::NUMERICOID => make_query!(operator, field, numeric, AnyNumeric, value, false),
+
+        pg_sys::TEXTOID => make_query!(operator, field, term_str, String, value, false),
+        pg_sys::VARCHAROID => make_query!(operator, field, term_str, String, value, false),
+        pg_sys::UUIDOID => make_query!(operator, field, uuid, pgrx::datum::Uuid, value, false),
+
+        pg_sys::DATEOID => make_query!(operator, field, date, pgrx::datum::Date, value, true),
+        pg_sys::TIMEOID => make_query!(operator, field, time, pgrx::datum::Time, value, true),
+        pg_sys::TIMETZOID => make_query!(operator, field, time_with_time_zone, pgrx::datum::TimeWithTimeZone, value, true),
+        pg_sys::TIMESTAMPOID => make_query!(operator, field, timestamp, pgrx::datum::Timestamp, value, true),
+        pg_sys::TIMESTAMPTZOID => make_query!(operator, field, timestamp_with_time_zone, pgrx::datum::TimestampWithTimeZone, value, true),
+        
+
+        other => panic!("unsupported type: {other:?}"),
+    }
+}
+
+unsafe fn generic_range_query(
+    field: FieldName,
+    lower: Bound<AnyElement>,
+    upper: Bound<AnyElement>,
+    is_datetime: bool,
+) -> anyhow::Result<SearchQueryInput> {
+    let query = match (lower, upper) {
+        (Bound::Included(s), Bound::Included(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+        (Bound::Included(s), Bound::Excluded(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+        (Bound::Included(s), Bound::Unbounded) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Unbounded,
+            is_datetime,
+        },
+        (Bound::Excluded(s), Bound::Excluded(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+        (Bound::Excluded(s), Bound::Included(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+        (Bound::Excluded(s), Bound::Unbounded) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(s)?)),
+            upper_bound: Bound::Unbounded,
+            is_datetime,
+        },
+        (Bound::Unbounded, Bound::Unbounded) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Unbounded,
+            upper_bound: Bound::Unbounded,
+            is_datetime,
+        },
+        (Bound::Unbounded, Bound::Included(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Unbounded,
+            upper_bound: Bound::Included(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+        (Bound::Unbounded, Bound::Excluded(e)) => SearchQueryInput::Range {
+            field: field.into_inner(),
+            lower_bound: Bound::Unbounded,
+            upper_bound: Bound::Excluded(OwnedValue::from(TantivyValue::try_from_anyelement(e)?)),
+            is_datetime,
+        },
+    };
+
+    Ok(query)
+}
+
 #[pg_extern(immutable, parallel_safe)]
 pub fn regex(field: FieldName, pattern: String) -> SearchQueryInput {
     SearchQueryInput::Regex {
@@ -641,7 +759,7 @@ term_fn!(date, pgrx::datum::Date);
 term_fn!(time, pgrx::datum::Time);
 term_fn!(timestamp, pgrx::datum::Timestamp);
 term_fn!(time_with_time_zone, pgrx::datum::TimeWithTimeZone);
-term_fn!(timestamp_with_time_zome, pgrx::datum::TimestampWithTimeZone);
+term_fn!(timestamp_with_time_zone, pgrx::datum::TimestampWithTimeZone);
 term_fn!(numeric, pgrx::AnyNumeric);
 term_fn!(uuid, pgrx::Uuid);
 term_fn_unsupported!(json, pgrx::Json, "json");
@@ -863,6 +981,12 @@ impl AsRef<str> for FieldName {
 impl From<String> for FieldName {
     fn from(value: String) -> Self {
         Self(value)
+    }
+}
+
+impl From<&str> for FieldName {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
     }
 }
 

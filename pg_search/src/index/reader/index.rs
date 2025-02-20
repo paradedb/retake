@@ -737,7 +737,7 @@ impl SearchIndexReader {
         let query = self.query(search_query_input);
         let weight = query
             .weight(enable_scoring(
-                search_query_input.contains_more_like_this(),
+                search_query_input.need_scores(),
                 &self.searcher,
             ))
             .expect("weight should be constructable");

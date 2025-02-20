@@ -30,6 +30,14 @@ impl<'a> Iterator for SearchQueryInputIter<'a> {
                     self.stack.push(query);
                     continue;
                 }
+                SearchQueryInput::ScoreFilter { query, .. } => {
+                    self.stack.push(
+                        query
+                            .as_mut()
+                            .expect("ScoreFilter's query should have been set"),
+                    );
+                    continue;
+                }
                 SearchQueryInput::DisjunctionMax { disjuncts, .. } => {
                     self.stack.extend(disjuncts.iter_mut().rev());
                     continue;

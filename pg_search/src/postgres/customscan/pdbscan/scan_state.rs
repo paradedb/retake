@@ -135,7 +135,13 @@ impl PdbScanState {
 
     #[inline(always)]
     pub fn need_scores(&self) -> bool {
-        self.need_scores || self.search_query_input.contains_more_like_this()
+        self.need_scores
+            || self.search_query_input.need_scores()
+            || self
+                .quals
+                .as_ref()
+                .map(|quals| quals.contains_score_exprs())
+                .unwrap_or_default()
     }
 
     #[inline(always)]

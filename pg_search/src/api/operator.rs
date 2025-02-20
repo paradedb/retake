@@ -59,7 +59,7 @@ unsafe impl SqlTranslatable for ReturnedNodePointer {
     }
 }
 
-fn parse_with_field_procoid() -> pg_sys::Oid {
+pub fn parse_with_field_procoid() -> pg_sys::Oid {
     unsafe {
         direct_function_call::<pg_sys::Oid>(
             pg_sys::regprocedurein,
@@ -70,7 +70,7 @@ fn parse_with_field_procoid() -> pg_sys::Oid {
     }
 }
 
-fn anyelement_query_input_procoid() -> pg_sys::Oid {
+pub fn anyelement_query_input_procoid() -> pg_sys::Oid {
     unsafe {
         direct_function_call::<pg_sys::Oid>(
             pg_sys::regprocedurein,

@@ -728,6 +728,27 @@ pub struct SearchField {
     pub type_: SearchFieldType,
 }
 
+impl SearchField {
+    pub fn is_text(&self) -> bool {
+        matches!(self.type_, SearchFieldType::Text)
+    }
+
+    pub fn is_raw(&self) -> bool {
+        matches!(
+            self.config,
+            SearchFieldConfig::Text {
+                tokenizer: SearchTokenizer::Raw(SearchTokenizerFilters {
+                    remove_long: None,
+                    lowercase: None,
+                    stemmer: None
+                }),
+                normalizer: SearchNormalizer::Raw,
+                ..
+            }
+        )
+    }
+}
+
 impl From<&SearchField> for Field {
     fn from(val: &SearchField) -> Self {
         val.id.0

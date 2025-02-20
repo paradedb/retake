@@ -36,9 +36,9 @@ use tantivy::tokenizer::{
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
 pub struct SearchTokenizerFilters {
-    remove_long: Option<usize>,
-    lowercase: Option<bool>,
-    stemmer: Option<Language>,
+    pub remove_long: Option<usize>,
+    pub lowercase: Option<bool>,
+    pub stemmer: Option<Language>,
 }
 
 impl SearchTokenizerFilters {

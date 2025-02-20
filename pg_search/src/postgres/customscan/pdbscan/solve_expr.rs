@@ -29,8 +29,6 @@ impl SearchQueryInput {
                         *sqi = expr
                             .solve(expr_context, sqi_typoid)
                             .expect("PostgresExpression should not evaluate to NULL");
-
-                        // pgrx::warning!("solved query to: {:?}", *query);
                     }
                 }
             })

@@ -118,7 +118,7 @@ pub extern "C" fn amrescan(
             .0;
         let key_field_type = search_reader.key_field().type_.into();
 
-        let need_scores = search_query_input.contains_more_like_this();
+        let need_scores = search_query_input.need_scores();
         let results = if (*scan).parallel_scan.is_null() {
             // not a parallel scan
             search_reader.search(

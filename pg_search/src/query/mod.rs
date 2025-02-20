@@ -17,9 +17,11 @@
 
 pub mod iter_mut;
 mod range;
+mod score;
 
 use crate::postgres::utils::convert_pg_date_string;
 use crate::query::range::{Comparison, RangeField};
+use crate::query::score::ScoreFilter;
 use crate::schema::IndexRecordOption;
 use anyhow::Result;
 use core::panic;
@@ -100,6 +102,10 @@ pub enum SearchQueryInput {
     ConstScore {
         query: Box<SearchQueryInput>,
         score: f32,
+    },
+    ScoreFilter {
+        bounds: Vec<(std::ops::Bound<f32>, std::ops::Bound<f32>)>,
+        query: Option<Box<SearchQueryInput>>,
     },
     DisjunctionMax {
         disjuncts: Vec<SearchQueryInput>,
@@ -266,24 +272,16 @@ pub enum SearchQueryInput {
 }
 
 impl SearchQueryInput {
-    pub fn postgres_expression(
-        var: *mut pg_sys::Var,
-        opoid: pg_sys::Oid,
-        node: *mut pg_sys::Node,
-    ) -> Self {
-        assert!(!var.is_null());
-        assert!(!node.is_null());
+    pub fn postgres_expression(node: *mut pg_sys::Node) -> Self {
         SearchQueryInput::PostgresExpression {
             expr: PostgresExpression {
-                var: PostgresPointer(var.cast()),
-                opoid,
                 node: PostgresPointer(node.cast()),
                 expr_state: PostgresPointer::default(),
             },
         }
     }
 
-    pub fn contains_more_like_this(&self) -> bool {
+    pub fn need_scores(&self) -> bool {
         match self {
             SearchQueryInput::Boolean {
                 must,
@@ -293,14 +291,15 @@ impl SearchQueryInput {
                 .iter()
                 .chain(should.iter())
                 .chain(must_not.iter())
-                .any(Self::contains_more_like_this),
-            SearchQueryInput::Boost { query, .. } => Self::contains_more_like_this(query),
-            SearchQueryInput::ConstScore { query, .. } => Self::contains_more_like_this(query),
+                .any(Self::need_scores),
+            SearchQueryInput::Boost { query, .. } => Self::need_scores(query),
+            SearchQueryInput::ConstScore { query, .. } => Self::need_scores(query),
             SearchQueryInput::DisjunctionMax { disjuncts, .. } => {
-                disjuncts.iter().any(Self::contains_more_like_this)
+                disjuncts.iter().any(Self::need_scores)
             }
-            SearchQueryInput::WithIndex { query, .. } => Self::contains_more_like_this(query),
+            SearchQueryInput::WithIndex { query, .. } => Self::need_scores(query),
             SearchQueryInput::MoreLikeThis { .. } => true,
+            SearchQueryInput::ScoreFilter { .. } => true,
             _ => false,
         }
     }
@@ -359,6 +358,15 @@ impl AsHumanReadable for SearchQueryInput {
             SearchQueryInput::ConstScore { query, score } => {
                 s.push_str(&query.as_human_readable());
                 s.push_str(&format!("^{score}"));
+            }
+            SearchQueryInput::ScoreFilter { bounds, query } => {
+                s.push_str(&format!(
+                    "SCORE:{bounds:?}({})",
+                    query
+                        .as_ref()
+                        .expect("ScoreFilter's query should have been set")
+                        .as_human_readable()
+                ));
             }
             SearchQueryInput::DisjunctionMax { disjuncts, .. } => {
                 s.push('(');
@@ -725,6 +733,12 @@ impl SearchQueryInput {
             Self::ConstScore { query, score } => Ok(Box::new(ConstScoreQuery::new(
                 query.into_tantivy_query(field_lookup, parser, searcher)?,
                 score,
+            ))),
+            Self::ScoreFilter { bounds, query } => Ok(Box::new(ScoreFilter::new(
+                bounds,
+                query
+                    .expect("ScoreFilter's query should have been set")
+                    .into_tantivy_query(field_lookup, parser, searcher)?,
             ))),
             Self::DisjunctionMax {
                 disjuncts,
@@ -2015,8 +2029,6 @@ impl<'de> Deserialize<'de> for PostgresPointer {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PostgresExpression {
-    var: PostgresPointer,
-    opoid: pg_sys::Oid,
     node: PostgresPointer,
     #[serde(skip)]
     expr_state: PostgresPointer,
@@ -2025,19 +2037,6 @@ pub struct PostgresExpression {
 impl PostgresExpression {
     pub fn set_expr_state(&mut self, expr_state: *mut pg_sys::ExprState) {
         self.expr_state = PostgresPointer(expr_state.cast())
-    }
-
-    #[inline]
-    pub fn var(&self) -> *mut pg_sys::Var {
-        unsafe {
-            assert!(pgrx::is_a(self.var.0.cast(), pg_sys::NodeTag::T_Var));
-            self.var.0.cast()
-        }
-    }
-
-    #[inline]
-    pub fn opoid(&self) -> pg_sys::Oid {
-        self.opoid
     }
 
     #[inline]

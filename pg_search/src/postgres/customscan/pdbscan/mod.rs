@@ -20,6 +20,7 @@ mod exec_methods;
 pub mod parallel;
 mod privdat;
 mod projections;
+mod pushdown;
 mod qual_inspect;
 mod scan_state;
 mod solve_expr;
@@ -159,12 +160,26 @@ impl CustomScan for PdbScan {
             //
             // look for quals we can support
             //
-            if let Some(quals) = extract_quals(
+            let mut uses_our_operator = false;
+            let quals = extract_quals(
+                root,
                 rti,
                 restrict_info.as_ptr().cast(),
                 anyelement_query_input_opoid(),
                 ri_type,
-            ) {
+                &schema,
+                &mut uses_our_operator,
+            );
+
+            if !uses_our_operator {
+                // for now, we're not going to submit our custom scan for queries that don't also
+                // use our `@@@` operator.  Perhaps in the future we can do this, but we don't want to
+                // circumvent Postgres' other possible plans that might do index scans over a btree
+                // index or something
+                return None;
+            }
+
+            if let Some(quals) = quals {
                 let has_expressions = quals.contains_exprs();
                 let selectivity = if let Some(limit) = limit {
                     // use the limit

@@ -20,8 +20,8 @@
 #![allow(unused_variables)]
 #![allow(clippy::tabs_in_doc_comments)]
 
-use pgrx::{pg_sys, PgMemoryContexts};
-use std::ffi::CStr;
+use pgrx::{direct_function_call, pg_sys, IntoDatum, PgMemoryContexts};
+use std::ffi::{CStr, CString};
 
 mod builders;
 mod dsm;
@@ -219,4 +219,12 @@ fn wrap_custom_scan_state<CS: CustomScan>(
 ) -> NonNull<CustomScanStateWrapper<CS>> {
     NonNull::<CustomScanStateWrapper<CS>>::new(node.cast())
         .expect("`CustomScanState` node should not be null")
+}
+
+pub unsafe fn operator_oid(signature: &str) -> pg_sys::Oid {
+    direct_function_call::<pg_sys::Oid>(
+        pg_sys::regoperatorin,
+        &[CString::new(signature).into_datum()],
+    )
+    .expect("should be able to lookup operator signature")
 }
