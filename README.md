@@ -43,12 +43,11 @@ To get started, please visit our [documentation](https://docs.paradedb.com).
 
 ## Deploying ParadeDB
 
-ParadeDB and its extensions can be deployed in one of two ways:
 
-- Docker image based on [Postgres](https://hub.docker.com/_/postgres) ([see deployment instructions](https://docs.paradedb.com/deploy/aws))
-- Kubernetes Helm chart based on [CloudNativePG](https://artifacthub.io/packages/helm/cloudnative-pg/cloudnative-pg) ([see deployment instructions](https://docs.paradedb.com/deploy/helm))
+```bash
+sh <(curl https://www.paradedb.com)
+```
 
-For more information, including enterprise features and support, please [contact us by email](mailto:sales@paradedb.com).
 
 ### Extensions
 
