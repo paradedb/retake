@@ -1,22 +1,8 @@
-// Copyright (c) 2023-2025 Retake, Inc.
-//
-// This file is part of ParadeDB - Postgres for Search and Analytics
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 mod bench_hits;
 mod benchmark;
+mod ci_benchmark;
+mod ci_json;
+mod ci_report;
 mod cli;
 mod elastic;
 mod subcommand;
@@ -24,6 +10,7 @@ mod tables;
 
 use anyhow::Result;
 use async_std::task::block_on;
+use ci_benchmark::BenchmarkSuite;
 use cli::{Cli, Corpus, EsLogsCommand, HitsCommand, Subcommand};
 use dotenvy::dotenv;
 use tracing_subscriber::EnvFilter;
@@ -93,6 +80,39 @@ fn main() -> Result<()> {
                     field,
                     term,
                 )),
+                EsLogsCommand::RunCiSuite {
+                    sql_files,
+                    url,
+                    table,
+                    index,
+                    txns,
+                } => {
+                    let db_url = url;
+                    let sql_files_paths = sql_files.iter().map(std::path::PathBuf::from).collect();
+
+                    let config = ci_benchmark::BenchmarkSuiteConfig {
+                        db_url,
+                        sql_files: sql_files_paths,
+                        clients: 1,
+                        transactions: txns.unwrap_or(100),
+                        index,
+                        maintenance_work_mem: "16GB".into(),
+                        report_table: table,
+                    };
+
+                    let mut suite = block_on(BenchmarkSuite::new(config))?;
+                    block_on(suite.run_all_benchmarks())?;
+
+                    Ok(())
+                }
+                EsLogsCommand::ReportCiSuite { rev, url, table } => {
+                    // Just call our new function in ci_report.rs
+                    ci_report::report_ci_suite(&rev, &url, &table)
+                }
+                EsLogsCommand::CompareCiSuites { url } => {
+                    // Our newly added command:
+                    ci_report::compare_ci_suites(&url)
+                }
             },
             Corpus::Hits(hits) => match hits.command {
                 HitsCommand::Run {

@@ -174,6 +174,37 @@ pub enum EsLogsCommand {
         #[arg(short, long)]
         elastic_url: String,
     },
+    RunCiSuite {
+        #[arg(short, long, env = "DATABASE_URL")]
+        url: String,
+        #[arg(long, default_value_t = false)]
+        index: bool,
+        #[arg(long)]
+        table: String,
+        #[arg(required = true)]
+        sql_files: Vec<String>,
+        #[arg(long)]
+        txns: Option<u32>,
+    },
+    #[clap(name = "report-ci-suite")]
+    ReportCiSuite {
+        /// The short revision to query for
+        rev: String,
+        /// The database connection URL
+        #[arg(short, long, env = "DATABASE_URL")]
+        url: String,
+        /// The table that stores the final JSON
+        #[arg(long)]
+        table: String,
+    },
+    #[clap(name = "compare-ci-suites")]
+    /// Compare two stored JSON rows (by revision) and render them side-by-side
+    /// to compare performance in `compare.html`.
+    CompareCiSuites {
+        /// The database connection URL (optional; defaults to local dev DB)
+        #[arg(short, long, env = "DATABASE_URL", default_value = "postgres://neilhansen@localhost:28817/postgres")]
+        url: String,
+    },
 }
 /// The command to run on the hits corpus.
 #[derive(Debug, clap::Subcommand)]

@@ -7,7 +7,7 @@ edition = { workspace = true }
 
 [dependencies]
 anyhow = "1.0.87"
-async-std = "1.13.0"
+async-std = { version = "1.13.0", features = ["attributes"] }
 chrono = { version = "0.4.38", features = ["clock", "alloc", "serde"] }
 clap = { version = "4.5.17", features = ["derive", "env"] }
 cmd_lib = "1.9.4"
@@ -16,6 +16,7 @@ dotenvy = "0.15.7"
 futures = "0.3.30"
 glob = "0.3.1"
 itertools = "0.12.1"
+minijinja = "2.7.0"
 once_cell = "1.19.0"
 reqwest = { version = "0.12.7", features = ["json", "blocking"] }
 serde = "1.0.210"
@@ -26,6 +27,7 @@ sqlx = { version = "0.7.4", features = [
   "chrono",
   "tls-native-tls",
 ] }
+sysinfo = { version = "0.33.1", features = ["disk"] }
 tempfile = "3.12.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

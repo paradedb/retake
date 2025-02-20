@@ -632,12 +632,14 @@ dependencies = [
  "futures",
  "glob",
  "itertools 0.12.1",
+ "minijinja",
  "once_cell",
  "reqwest 0.12.12",
  "rstest 0.18.2",
  "serde",
  "serde_json",
  "sqlx",
+ "sysinfo 0.33.1",
  "tempfile",
  "tracing",
  "tracing-subscriber",
@@ -2892,6 +2894,15 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "minijinja"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cff7b8df5e85e30b87c2b0b3f58ba3a87b68e133738bf512a7713769326dbca9"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "minimal-lexical"
