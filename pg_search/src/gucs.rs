@@ -51,11 +51,15 @@ static CREATE_INDEX_PARALLELISM: GucSetting<i32> = GucSetting::<i32>::new(0);
 static CREATE_INDEX_MEMORY_BUDGET: GucSetting<i32> = GucSetting::<i32>::new(1024);
 
 /// How many threads should tantivy use during a regular INSERT/UPDATE/COPY statement?
-static STATEMENT_PARALLELISM: GucSetting<i32> = GucSetting::<i32>::new(0);
+static STATEMENT_PARALLELISM: GucSetting<i32> = GucSetting::<i32>::new(1);
 
 /// How much memory should tantivy use during a regular INSERT/UPDATE/COPY statement?  This value is decided to each indexing
 /// thread.  So if there's 10 threads and this value is 100MB, then a total of 1GB will be allocated.
 static STATEMENT_MEMORY_BUDGET: GucSetting<i32> = GucSetting::<i32>::new(1024);
+
+/// Segments whose estimated byte size is larger than this value will **NOT** be considered for merging
+/// The default is 200MB
+static MAX_MERGEABLE_SEGMENT_SIZE: GucSetting<i32> = GucSetting::<i32>::new(200 * 1024 * 1024);
 
 pub fn init() {
     // Note that Postgres is very specific about the naming convention of variables.
@@ -135,7 +139,7 @@ pub fn init() {
     GucRegistry::define_int_guc(
         "paradedb.statement_parallelism",
         "The number of threads to use when indexing during an INSERT/UPDATE/COPY statement",
-        "Default is 0.  Recommended value is roughly the number of cores in the machine.  Value of zero means a thread for as many cores in the machine",
+        "Default is 1.  Recommended value is generally 1.  Value of zero means a thread for as many cores in the machine",
         &STATEMENT_PARALLELISM,
         0,
         std::thread::available_parallelism().expect("your computer should have at least one core").get().try_into().expect("your computer has too many cores"),
@@ -152,6 +156,17 @@ pub fn init() {
         i32::MAX,
         GucContext::Userset,
         GucFlags::UNIT_MB,
+    );
+
+    GucRegistry::define_int_guc(
+        "paradedb.max_mergeable_segment_size",
+        "If the estimated byte size of a segment is greater than this value, then it will NOT be merged with the next segment",
+        "Default is `200MB`",
+        &MAX_MERGEABLE_SEGMENT_SIZE,
+        0,
+        i32::MAX,
+        GucContext::Userset,
+        GucFlags::UNIT_BYTE,
     );
 }
 
@@ -187,6 +202,10 @@ pub fn statement_parallelism() -> NonZeroUsize {
 
 pub fn statement_memory_budget() -> usize {
     adjust_budget(STATEMENT_MEMORY_BUDGET.get(), statement_parallelism())
+}
+
+pub fn max_mergeable_segment_size() -> usize {
+    MAX_MERGEABLE_SEGMENT_SIZE.get() as usize
 }
 
 fn adjust_nthreads(nthreads: i32) -> NonZeroUsize {

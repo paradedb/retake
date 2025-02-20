@@ -6,11 +6,13 @@ Several settings can be used to tune the throughput of `INSERT`/`UPDATE`/`COPY` 
 
 ## Statement Parallelism
 
-`paradedb.statement_parallelism` controls the number of indexing threads used during `INSERT/UPDATE/COPY`. The default is `0`, which automatically detects the
-"available parallelism" of the host computer.
+`paradedb.statement_parallelism` controls the number of indexing threads used during `INSERT/UPDATE/COPY`. The default is `1` which will generally ensure only one
+segment is created by the INSERT/UPDATE/COPY statement.
 
-If your typical update patterns are single-row atomic `INSERT`s or `UPDATE`s, then a value of `1` can prevent unnecessary threads from being spun up. For bulk inserts
-and updates, a larger value is better.
+A value of zero will detect the "available parallelism" of the host computer.
+
+If your typical update patterns are single/few-row atomic `INSERT`s or `UPDATE`s, then a value of `1` can prevent extra segments from being created that later must be merged.
+For bulk inserts and updates, a larger value is better.
 
 ```sql
 SET paradedb.statement_parallelism = 1;
@@ -31,3 +33,18 @@ SET paradedb.statement_memory_budget = 15;
 ```
 
 Like [`paradedb.create_index_memory_budget`](/documentation/configuration/index#indexing-memory-per-thread), this setting can affect the number of segments in the index.
+
+## Max Mergeable Segment Size
+
+`paradedb.max_mergeable_segment_size` sets an upper limit on a segment's (estimated) byte size, measured in bytes, above which the segment will no longer be considered
+for merging.
+
+While it is beneficial, at query time, for an index to have roughly the same number of segments as CPUs of the host computer, it can be detrimental to write performance
+to merge large segments, either with each other or with a smaller segment.
+
+This parameter defaults to 200MB and should be adjusted up or down to find a balance between total index segment count and host CPUs in such a manner that acceptable
+write and search performance is achieved.
+
+```sql
+SET paradedb.max_mergeable_segment_size = 200MB;
+```

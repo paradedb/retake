@@ -19,8 +19,8 @@ use super::block::{bm25_max_free_space, BM25PageSpecialData, LinkedList, LinkedL
 use crate::postgres::storage::blocklist;
 use crate::postgres::storage::buffer::{BufferManager, PageHeaderMethods};
 use anyhow::Result;
-use pgrx::pg_sys;
 use pgrx::pg_sys::BlockNumber;
+use pgrx::{check_for_interrupts, pg_sys};
 use std::cmp::min;
 use std::io::{Cursor, Read, Write};
 use std::ops::{Deref, Range};
@@ -198,6 +198,7 @@ impl LinkedBytesList {
 
         let mut insert_blockno = self.get_last_blockno();
         while bytes_written < bytes.len() {
+            check_for_interrupts!();
             self.blocklist_builder.push(insert_blockno);
 
             let mut buffer = self.bman.get_buffer_mut(insert_blockno);
