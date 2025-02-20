@@ -25,6 +25,8 @@ use std::slice::from_raw_parts;
 use tantivy::index::{SegmentComponent, SegmentId};
 use tantivy::Opstamp;
 
+use super::linked_bytes::LinkedBytesList;
+
 pub const MERGE_LOCK: pg_sys::BlockNumber = 0;
 pub const CLEANUP_LOCK: pg_sys::BlockNumber = 1;
 pub const SCHEMA_START: pg_sys::BlockNumber = 2;
@@ -373,6 +375,10 @@ impl<T: AsRef<Path>> SegmentFileDetails for T {
 // Linked list entry MVCC methods
 // ---------------------------------------------------------
 
+pub trait BlockEntry {
+    unsafe fn get_associated_blocks(&self, relation_oid: pg_sys::Oid) -> Vec<pg_sys::BlockNumber>;
+}
+
 pub trait MVCCEntry {
     // Required methods
     fn get_xmin(&self) -> pg_sys::TransactionId;
@@ -448,6 +454,45 @@ impl MVCCEntry for SegmentMetaEntry {
             },
             ..self
         }
+    }
+}
+
+impl BlockEntry for SegmentMetaEntry {
+    unsafe fn get_associated_blocks(&self, relation_oid: pg_sys::Oid) -> Vec<pg_sys::BlockNumber> {
+        let mut blocks = Vec::with_capacity(8);
+        if let Some(postings) = self.postings {
+            let file = LinkedBytesList::open(relation_oid, postings.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(positions) = self.positions {
+            let file = LinkedBytesList::open(relation_oid, positions.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(fast_fields) = self.fast_fields {
+            let file = LinkedBytesList::open(relation_oid, fast_fields.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(field_norms) = self.field_norms {
+            let file = LinkedBytesList::open(relation_oid, field_norms.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(terms) = self.terms {
+            let file = LinkedBytesList::open(relation_oid, terms.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(store) = self.store {
+            let file = LinkedBytesList::open(relation_oid, store.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(temp_store) = self.temp_store {
+            let file = LinkedBytesList::open(relation_oid, temp_store.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        if let Some(delete) = self.delete {
+            let file = LinkedBytesList::open(relation_oid, delete.file_entry.starting_block);
+            blocks.extend(file.get_associated_blocks());
+        }
+        blocks
     }
 }
 

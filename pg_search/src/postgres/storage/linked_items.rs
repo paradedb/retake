@@ -15,7 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use super::block::{BM25PageSpecialData, LinkedList, LinkedListData, MVCCEntry, PgItem};
+use super::block::{
+    BM25PageSpecialData, BlockEntry, LinkedList, LinkedListData, MVCCEntry, PgItem,
+};
 use super::buffer::{BufferManager, BufferMut};
 use super::utils::vacuum_get_freeze_limit;
 use anyhow::Result;
@@ -56,14 +58,16 @@ use std::fmt::Debug;
 // | [next_blockno: BlockNumber, xmax: TransactionId]            |
 // +-------------------------------------------------------------+
 
-pub struct LinkedItemList<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> {
+pub struct LinkedItemList<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry + BlockEntry> {
     relation_oid: pg_sys::Oid,
     pub header_blockno: pg_sys::BlockNumber,
     bman: BufferManager,
     _marker: std::marker::PhantomData<T>,
 }
 
-impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedList for LinkedItemList<T> {
+impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry + BlockEntry> LinkedList
+    for LinkedItemList<T>
+{
     fn get_header_blockno(&self) -> pg_sys::BlockNumber {
         self.header_blockno
     }
@@ -81,7 +85,7 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedList for 
     }
 }
 
-impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedItemList<T> {
+impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry + BlockEntry> LinkedItemList<T> {
     pub fn open(relation_oid: pg_sys::Oid, header_blockno: pg_sys::BlockNumber) -> Self {
         Self {
             relation_oid,
@@ -148,9 +152,9 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedItemList<
     pub unsafe fn garbage_collect(&mut self, strategy: pg_sys::BufferAccessStrategy) -> Result<()> {
         // Delete all items that are definitely dead
         let snapshot = pg_sys::GetActiveSnapshot();
-        let heap_oid = pg_sys::IndexGetRelation(self.relation_oid, false);
-        let heap_relation = pg_sys::RelationIdGetRelation(heap_oid);
-        let freeze_limit = vacuum_get_freeze_limit(heap_relation);
+        // let heap_oid = pg_sys::IndexGetRelation(self.relation_oid, false);
+        // let heap_relation = pg_sys::RelationIdGetRelation(heap_oid);
+        let freeze_limit = vacuum_get_freeze_limit(std::ptr::null_mut());
         let start_blockno = self.get_start_blockno();
         let mut blockno = start_blockno;
         let mut last_filled_blockno = start_blockno;
@@ -161,11 +165,13 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedItemList<
             let mut offsetno = pg_sys::FirstOffsetNumber;
             let max_offset = page.max_offset_number();
             let mut delete_offsets = vec![];
+            let mut pages_to_recycle = vec![];
 
             while offsetno <= max_offset {
                 if let Some((entry, _)) = page.read_item::<T>(offsetno) {
-                    if entry.recyclable(snapshot, heap_relation) {
+                    if entry.recyclable(snapshot, std::ptr::null_mut()) {
                         delete_offsets.push(offsetno);
+                        pages_to_recycle.extend(entry.get_associated_blocks(self.relation_oid));
                     } else {
                         let xmin_needs_freeze = entry.xmin_needs_freeze(freeze_limit);
                         let xmax_needs_freeze = entry.xmax_needs_freeze(freeze_limit);
@@ -226,9 +232,25 @@ impl<T: From<PgItem> + Into<PgItem> + Debug + Clone + MVCCEntry> LinkedItemList<
                 }
                 last_filled_blockno = current_blockno;
             }
+
+            let mut vacuum_fsm = false;
+            for blockno in pages_to_recycle {
+                let buffer = self.bman.get_buffer(blockno);
+                let page = buffer.page();
+                if page.is_recyclable(std::ptr::null_mut()) {
+                    self.bman.record_free_index_page(buffer);
+                    vacuum_fsm = true;
+                }
+            }
+
+            if vacuum_fsm {
+                let index = pg_sys::RelationIdGetRelation(self.relation_oid);
+                pg_sys::IndexFreeSpaceMapVacuum(index);
+                pg_sys::RelationClose(index);
+            }
         }
 
-        pg_sys::RelationClose(heap_relation);
+        // pg_sys::RelationClose(heap_relation);
         Ok(())
     }
 

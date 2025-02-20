@@ -279,6 +279,23 @@ impl LinkedBytesList {
         lock_page.mark_deleted();
     }
 
+    pub unsafe fn get_associated_blocks(&self) -> Vec<pg_sys::BlockNumber> {
+        let mut blocks = vec![];
+        for starting_blockno in [self.metadata.start_blockno, self.metadata.blocklist_start] {
+            let mut blockno = starting_blockno;
+            while blockno != pg_sys::InvalidBlockNumber {
+                blocks.push(blockno);
+                let buffer = self.bman.get_buffer(blockno);
+                let page = buffer.page();
+                let special = page.special::<BM25PageSpecialData>();
+                blockno = special.next_blockno;
+            }
+        }
+
+        blocks.push(self.header_blockno);
+        blocks
+    }
+
     pub fn is_empty(&self) -> bool {
         self.bman.page_is_empty(self.get_start_blockno())
     }
